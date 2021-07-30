@@ -6,7 +6,6 @@ from imageio import mimread
 
 import numpy as np
 from torch.utils.data import Dataset
-import glob
 
 
 def read_video(name, frame_shape):
@@ -20,8 +19,7 @@ def read_video(name, frame_shape):
     if os.path.isdir(name):
         frames = sorted(os.listdir(name))
         num_frames = len(frames)
-        video_array = np.array(
-            [img_as_float32(io.imread(os.path.join(name, frames[idx]))) for idx in range(num_frames)])
+        video_array = np.array([img_as_float32(io.imread(os.path.join(name, frames[idx]))) for idx in range(num_frames)])
     elif name.lower().endswith('.png') or name.lower().endswith('.jpg'):
         image = io.imread(name)
 
@@ -58,27 +56,20 @@ class FramesDataset(Dataset):
       - folder with all frames
     """
 
-    def __init__(self, root_dir, frame_shape=(256, 256, 3), id_sampling=False, is_train=True,
-                 random_seed=0, pairs_list=None, augmentation_params=None):
+    def __init__(self, root_dir, frame_shape=(256, 256, 3), is_train=True, random_seed=42, **kwargs):
         self.root_dir = root_dir
         self.videos = os.listdir(root_dir)
         self.frame_shape = tuple(frame_shape)
-        self.pairs_list = pairs_list
-        self.id_sampling = id_sampling
+
         if os.path.exists(os.path.join(root_dir, 'train')):
             assert os.path.exists(os.path.join(root_dir, 'test'))
             print("Use predefined train-test split.")
-            if id_sampling:
-                train_videos = {os.path.basename(video).split('#')[0] for video in
-                                os.listdir(os.path.join(root_dir, 'train'))}
-                train_videos = list(train_videos)
-            else:
-                train_videos = os.listdir(os.path.join(root_dir, 'train'))
+            train_videos = os.listdir(os.path.join(root_dir, 'train'))
             test_videos = os.listdir(os.path.join(root_dir, 'test'))
             self.root_dir = os.path.join(self.root_dir, 'train' if is_train else 'test')
         else:
             print("Use random train-test split.")
-            train_videos, test_videos = train_test_split(self.videos, random_state=random_seed, test_size=0.2)
+            train_videos, test_videos = train_test_split(self.videos, random_state=random_seed, test_size=0.15)
 
         if is_train:
             self.videos = train_videos
@@ -91,12 +82,8 @@ class FramesDataset(Dataset):
         return len(self.videos)
 
     def __getitem__(self, idx):
-        if self.is_train and self.id_sampling:
-            name = self.videos[idx]
-            path = np.random.choice(glob.glob(os.path.join(self.root_dir, name + '*.mp4')))
-        else:
-            name = self.videos[idx]
-            path = os.path.join(self.root_dir, name)
+        name = self.videos[idx]
+        path = os.path.join(self.root_dir, name)
 
         video_name = os.path.basename(path)
 
@@ -108,8 +95,7 @@ class FramesDataset(Dataset):
         else:
             video_array = read_video(path, frame_shape=self.frame_shape)
             num_frames = len(video_array)
-            frame_idx = np.sort(np.random.choice(num_frames, replace=True, size=2)) if self.is_train else range(
-                num_frames)
+            frame_idx = np.sort(np.random.choice(num_frames, replace=True, size=2)) if self.is_train else range(num_frames)
             video_array = video_array[frame_idx]
 
         out = {}

@@ -1,22 +1,24 @@
+import warnings
+
+warnings.simplefilter("ignore", UserWarning)
+
 import torch
 import torchvision
 from torch.utils.data import DataLoader
 
-import pickle
 from tqdm import tqdm
-from logger import Logger
 from modules.model import GeneratorFullModel, DiscriminatorFullModel
 from modules.pretrained_hopenet import Hopenet
 from torch.optim.lr_scheduler import MultiStepLR
 
+from logger import Logger
+from frames_dataset import DatasetRepeater
 from sync_batchnorm import DataParallelWithCallback
 
-from frames_dataset import DatasetRepeater
 
-
-def load_pretrained_hopenet(config):
+def load_pretrained_hopenet(train_params):
     model = Hopenet(torchvision.models.resnet.Bottleneck, [3, 4, 6, 3], 66)
-    model.load_state_dict(torch.load(config['pretrained_hopenet_dir']))
+    model.load_state_dict(torch.load(train_params['pretrained_hopenet_dir']))
 
     for param in model.parameters():
         param.requires_grad = False
@@ -51,8 +53,16 @@ def train(config, appearance_feature_extractor, canonical_keypoint_detector, hea
                   optimizer_multi_scale_discriminator]
 
     if checkpoint is not None:
-        pass
-        # TODO : Logger.load_cpk()
+        start_epoch = Logger.load_cpk(appearance_feature_extractor,
+                                      canonical_keypoint_detector,
+                                      head_expression_estimator,
+                                      occlusion_aware_generator,
+                                      multi_scale_discriminator,
+                                      optimizer_appearance_feature_extractor,
+                                      optimizer_canonical_keypoint_detector,
+                                      optimizer_head_expression_estimator,
+                                      optimizer_occlusion_aware_generator,
+                                      optimizer_multi_scale_discriminator)
     else:
         start_epoch = 0
 
@@ -107,7 +117,7 @@ def train(config, appearance_feature_extractor, canonical_keypoint_detector, hea
         generator_full = DataParallelWithCallback(generator_full, device_ids=device_ids)
         discriminator_full = DataParallelWithCallback(discriminator_full, device_ids=device_ids)
 
-    with Logger(log_dir=log_dir, visualizer_params=config['visualizer_params'], checkpoint_freq=train_params['checkpoint_freq']) as logger:
+    with Logger(log_dir=log_dir, checkpoint_freq=train_params['checkpoint_freq']) as logger:
 
         for epoch in tqdm(start_epoch, total=train_params['num_epochs']):
             for x in dataloader:
@@ -140,4 +150,16 @@ def train(config, appearance_feature_extractor, canonical_keypoint_detector, hea
             for scheduler in schedulers:
                 scheduler.step()
 
-            # TODO : Logger.log_epoch()
+        logger.log_epoch(epoch=epoch,
+                         models={
+                             'appearance_feature_extractor': appearance_feature_extractor,
+                             'canonical_keypoint_detector': canonical_keypoint_detector,
+                             'head_expression_estimator': head_expression_estimator,
+                             'occlusion_aware_generator': occlusion_aware_generator,
+                             'multi_scale_discriminator': multi_scale_discriminator,
+                             'optimizer_appearance_feature_extractor': optimizer_appearance_feature_extractor,
+                             'optimizer_canonical_keypoint_detector': optimizer_canonical_keypoint_detector,
+                             'optimizer_head_expression_estimator': optimizer_head_expression_estimator,
+                             'optimizer_occlusion_aware_generator': optimizer_occlusion_aware_generator,
+                             'optimizer_multi_scale_discriminator': optimizer_multi_scale_discriminator, }
+                         )

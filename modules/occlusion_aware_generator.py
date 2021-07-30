@@ -41,6 +41,7 @@ class OcclusionAwareGenerator(nn.Module):
 
         self.final = nn.Conv2d(block_expansion, out_channels=output_channels, kernel_size=(7, 7), padding=(3, 3))
         self.estimate_occlusion_map = estimate_occlusion_map
+        self.output_channels = output_channels
 
     @staticmethod
     def deform_source_feature(source_feature, deformation):
