@@ -65,9 +65,9 @@ if __name__ == '__main__':
         log_dir = os.path.join(args.log_dir, os.path.basename(args.config).split('.')[0])
         log_dir += ' ' + strftime("%d_%m_%y_%H.%M.%S", gmtime())
 
-    models = []
-    for model in MODELS.keys():
-        models.append(init_model(model, config))
+    models = dict()
+    for model_ in MODELS.keys():
+        models[model_] = init_model(model_, config)
 
     dataset = FramesDataset(is_train=(args.mode == 'train'), **config['dataset_params'])
 
@@ -78,4 +78,9 @@ if __name__ == '__main__':
 
     if args.mode == 'train':
         print("Training...")
-        train(config, *models, args.checkpoint, log_dir, dataset, args.device_ids)
+        train(config=config,
+              checkpoint=args.checkpoint,
+              log_dir=log_dir,
+              dataset=dataset,
+              device_ids=args.device_ids,
+              **models)

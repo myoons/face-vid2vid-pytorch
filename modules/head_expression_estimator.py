@@ -1,17 +1,18 @@
 """ Head pose & Expression Estimator module which estimates the rotation angles, translation vector, expression deformations from images """
 
 import torch.nn as nn
-from modules.util import ResBottleneck
+from modules.blocks import ResBottleneck
 from sync_batchnorm import SynchronizedBatchNorm2d as BatchNorm2d
 
 
 class HeadExpressionEstimator(nn.Module):
 
-    def __init__(self, block_expansion=256, num_bins=66, num_layers=(3, 3, 5, 2), num_kp=20, **kwargs):
+    def __init__(self, depth, num_kp, num_channels, block_expansion, num_bins, num_layers):
         super(HeadExpressionEstimator, self).__init__()
 
+        self.depth = depth
         self.first = nn.Sequential(
-            nn.Conv2d(in_channels=3, out_channels=64, kernel_size=(7, 7), stride=(2, 2), padding=(3, 3), bias=False),
+            nn.Conv2d(in_channels=num_channels, out_channels=64, kernel_size=(7, 7), stride=(2, 2), padding=(3, 3), bias=False),
             BatchNorm2d(64),
             nn.ReLU(),
             nn.MaxPool2d(kernel_size=3, stride=2, padding=1)

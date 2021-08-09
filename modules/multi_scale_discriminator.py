@@ -1,15 +1,17 @@
 import torch.nn as nn
-import torch.nn.functional as F
 
 
 class DownBlock2d(nn.Module):
 
-    def __init__(self, in_features, out_features, stride=(2, 2), kernel_size=(4, 4), padding=(1, 1),
-                 negative_slope=0.2, act=False, norm=False, **kwargs):
+    def __init__(self, in_features, out_features, stride=(2, 2), kernel_size=(4, 4),
+                 padding=(1, 1), negative_slope=0.2, act=False, norm=False):
         super(DownBlock2d, self).__init__()
 
-        self.conv = nn.Conv2d(in_channels=in_features, out_channels=out_features, kernel_size=kernel_size,
-                              stride=stride, padding=padding)
+        self.conv = nn.Conv2d(in_channels=in_features,
+                              out_channels=out_features,
+                              kernel_size=kernel_size,
+                              stride=stride,
+                              padding=padding)
 
         if act:
             self.act = nn.LeakyReLU(negative_slope)
@@ -37,16 +39,17 @@ class PatchDiscriminator(nn.Module):
     Discriminator similar with PatchGAN.
     """
 
-    def __init__(self, in_channels=3, max_features=512, block_expansion=64, negative=0.2, num_blocks=5, **kwargs):
+    def __init__(self, in_channels, block_expansion, num_blocks, max_features, negative):
         super(PatchDiscriminator, self).__init__()
 
-        down_blocks = [DownBlock2d(in_features=in_channels if i == 0 else min(max_features, block_expansion * (2 ** (i - 1))),
-                       out_features=1 if i == (num_blocks - 1) else min(max_features, block_expansion * (2 ** i)),
-                       stride=(1, 1) if i > 2 else (2, 2),
-                       negative_slope=negative,
-                       act=False if i == (num_blocks - 1) else True,
-                       norm=False if i == 0 or i == (num_blocks - 1) else True)
-                       for i in range(num_blocks)]
+        down_blocks = [
+            DownBlock2d(in_features=in_channels if i == 0 else min(max_features, block_expansion * (2 ** (i - 1))),
+                        out_features=1 if i == (num_blocks - 1) else min(max_features, block_expansion * (2 ** i)),
+                        stride=(1, 1) if i > 2 else (2, 2),
+                        negative_slope=negative,
+                        act=False if i == (num_blocks - 1) else True,
+                        norm=False if i == 0 or i == (num_blocks - 1) else True)
+            for i in range(num_blocks)]
         self.down_blocks = nn.ModuleList(down_blocks)
 
     def forward(self, x):
@@ -62,14 +65,20 @@ class MultiScaleDiscriminator(nn.Module):
     Multi-scale discriminator with PatchGAN.
     """
 
-    def __init__(self, scales=(), **kwargs):
+    def __init__(self, depth, num_kp, num_channels, scales, block_expansion, num_blocks, max_features, negative):
         super(MultiScaleDiscriminator, self).__init__()
 
+        self.depth = depth
+        self.num_kp = num_kp
         self.scales = scales
 
         discriminators = {}
         for scale in scales:
-            discriminators[str(scale).replace('.', '-')] = PatchDiscriminator(**kwargs)
+            discriminators[str(scale).replace('.', '-')] = PatchDiscriminator(in_channels=num_channels,
+                                                                              block_expansion=block_expansion,
+                                                                              num_blocks=num_blocks,
+                                                                              max_features=max_features,
+                                                                              negative=negative)
         self.discs = nn.ModuleDict(discriminators)
 
     def forward(self, x):
@@ -82,3 +91,23 @@ class MultiScaleDiscriminator(nn.Module):
             out_dict[f'prediction_map_{scale}'] = outs[-1]
 
         return out_dict
+
+
+if __name__ == '__main__':
+    import yaml, cv2, torch
+
+    with open('../config/vox.yaml') as f:
+        config = yaml.load(f)
+
+    image = cv2.imread('../data/vox/id00017/iJOjkDq6rW8/0001.jpg')
+    image = torch.tensor(image).unsqueeze(0).permute(0, 3, 1, 2).float()
+
+    d = MultiScaleDiscriminator(**config['model_params']['common_params'],
+                                **config['model_params']['multi_scale_discriminator'])
+
+    from modules.util import ImagePyramid
+
+    ip = ImagePyramid(config['model_params']['multi_scale_discriminator']['scales'], 3)
+    inputs = ip(image)
+    out = d(inputs)
+    print('A')

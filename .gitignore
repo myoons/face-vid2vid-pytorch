@@ -1,3 +1,5 @@
 __pycache__/
 .idea/
-data/vox
+data/vox/
+data/vox_mp4/
+pretrained/

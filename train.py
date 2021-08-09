@@ -3,27 +3,15 @@ import warnings
 warnings.simplefilter("ignore", UserWarning)
 
 import torch
-import torchvision
 from torch.utils.data import DataLoader
 
 from tqdm import tqdm
-from modules.model import GeneratorFullModel, DiscriminatorFullModel
-from modules.pretrained_hopenet import Hopenet
 from torch.optim.lr_scheduler import MultiStepLR
+from modules.models import GeneratorFullModel, DiscriminatorFullModel
 
 from logger import Logger
 from frames_dataset import DatasetRepeater
 from sync_batchnorm import DataParallelWithCallback
-
-
-def load_pretrained_hopenet(train_params):
-    model = Hopenet(torchvision.models.resnet.Bottleneck, [3, 4, 6, 3], 66)
-    model.load_state_dict(torch.load(train_params['pretrained_hopenet_dir']))
-
-    for param in model.parameters():
-        param.requires_grad = False
-
-    return model
 
 
 def train(config, appearance_feature_extractor, canonical_keypoint_detector, head_expression_estimator,
@@ -101,17 +89,15 @@ def train(config, appearance_feature_extractor, canonical_keypoint_detector, hea
         dataset = DatasetRepeater(dataset, train_params['num_repeats'])
     dataloader = DataLoader(dataset, batch_size=train_params['batch_size'], shuffle=True, num_workers=6, drop_last=True)
 
-    pretrained_hopenet = load_pretrained_hopenet(config)
-    generator_full = GeneratorFullModel(appearance_feature_extractor,
-                                        canonical_keypoint_detector,
-                                        head_expression_estimator,
-                                        pretrained_hopenet,
-                                        occlusion_aware_generator,
-                                        multi_scale_discriminator,
-                                        train_params)
-    discriminator_full = DiscriminatorFullModel(occlusion_aware_generator,
-                                                multi_scale_discriminator,
-                                                train_params)
+    generator_full = GeneratorFullModel(appearance_feature_extractor=appearance_feature_extractor,
+                                        canonical_keypoint_detector=canonical_keypoint_detector,
+                                        head_expression_estimator=head_expression_estimator,
+                                        occlusion_aware_generator=occlusion_aware_generator,
+                                        multi_scale_discriminator=multi_scale_discriminator,
+                                        train_params=train_params)
+    discriminator_full = DiscriminatorFullModel(multi_scale_discriminator=multi_scale_discriminator,
+                                                generator_output_channels=occlusion_aware_generator.output_channels,
+                                                train_params=train_params)
 
     if torch.cuda.is_available():
         generator_full = DataParallelWithCallback(generator_full, device_ids=device_ids)

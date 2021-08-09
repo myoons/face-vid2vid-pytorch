@@ -1,7 +1,8 @@
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
-from modules.util import Hourglass, AntiAliasInterpolation2d, make_coordinate_grid
+from modules.util import make_coordinate_grid
+from modules.blocks import Hourglass, AntiAliasInterpolation2d
 
 
 class CanonicalKeypointDetector(nn.Module):
@@ -9,23 +10,29 @@ class CanonicalKeypointDetector(nn.Module):
     Detecting canonical keypoints. Return keypoints position and jacobian near each keypoints.
     """
 
-    def __init__(self, block_expansion=64, num_kp=20, num_channels=3, max_features=1024, num_blocks=5,
-                 depth=16, temperature=0.1, estimate_jacobian=False, scale_factor=1, pad=(3, 3, 3), **kwargs):
+    def __init__(self, depth, num_kp, num_channels, block_expansion, max_features, num_blocks,
+                 temperature, scale_factor, estimate_jacobian=False, is_keypoint=True):
         super(CanonicalKeypointDetector, self).__init__()
 
-        self.predictor = Hourglass(block_expansion=block_expansion,
-                                   in_features=num_channels,
-                                   depth=depth,
-                                   num_blocks=num_blocks,
-                                   max_features=max_features,
-                                   encoder_3d=False)
+        self.first = Hourglass(block_expansion=block_expansion,
+                               in_features=num_channels,
+                               depth=depth,
+                               num_blocks=num_blocks,
+                               max_features=max_features,
+                               is_keypoint=is_keypoint)
 
-        self.kp = nn.Conv3d(in_channels=self.predictor.out_filters, out_channels=num_kp, kernel_size=(7, 7, 7), padding=pad)
+        self.kp = nn.Conv3d(in_channels=self.first.out_filters,
+                            out_channels=num_kp,
+                            kernel_size=(3, 3, 3),  # (7, 7, 7) is replaced to (3, 3, 3)
+                            padding=(1, 1, 1))
 
         if estimate_jacobian:
-            self.jacobian = nn.Conv3d(in_channels=self.predictor.out_filters, out_channels=9 * num_kp, kernel_size=(7, 7, 7), padding=pad)
+            self.jacobian = nn.Conv3d(in_channels=self.first.out_filters,
+                                      out_channels=9 * num_kp,
+                                      kernel_size=(3, 3, 3),  # (7, 7, 7) is replaced to (3, 3, 3)
+                                      padding=(1, 1, 1))
             self.jacobian.weight.data.zero_()
-            self.jacobian.bias.data.copy_(torch.tensor([1, 0, 0, 0, 1, 0, 0, 0, 1] * num_kp, dtype=torch.float))
+            self.jacobian.bias.data.copy_(torch.Tensor([1, 0, 0, 0, 1, 0, 0, 0, 1] * num_kp).float())
         else:
             self.jacobian = None
 
@@ -42,7 +49,7 @@ class CanonicalKeypointDetector(nn.Module):
         """
         shape = heatmap.shape
         heatmap = heatmap.unsqueeze(-1)
-        grid = make_coordinate_grid(shape[2:], heatmap.type()).unsqueeze(0).unsqueeze(0)
+        grid = make_coordinate_grid(shape[2:], dtype=heatmap.type()).unsqueeze(0).unsqueeze(0)
         keypoints = (heatmap * grid).sum(dim=(2, 3, 4))
         kp = {'keypoints': keypoints}
 
@@ -52,18 +59,18 @@ class CanonicalKeypointDetector(nn.Module):
         if self.scale_factor != 1:
             x = self.down(x)
 
-        feature_map = self.predictor(x)
-        prediction = self.kp(feature_map)
+        out = self.first(x)
+        keypoints = self.kp(out)
 
-        final_shape = prediction.shape
-        heatmap = prediction.view(final_shape[0], final_shape[1], -1)
-        heatmap = F.softmax(heatmap / self.temperature, dim=2)
+        final_shape = keypoints.shape
+        heatmap = keypoints.view(final_shape[0], final_shape[1], -1)
+        heatmap = F.softmax(heatmap / self.temperature, dim=-1)
         heatmap = heatmap.view(*final_shape)
 
-        out = self.gaussian2kp(heatmap)
+        result = self.gaussian2kp(heatmap)
 
         if self.jacobian is not None:
-            jacobian_map = self.jacobian(feature_map)
+            jacobian_map = self.jacobian(out)
             jacobian_map = jacobian_map.reshape(final_shape[0], self.num_kp, 9, final_shape[2], final_shape[3], final_shape[4])
             heatmap = heatmap.unsqueeze(2)
 
@@ -71,6 +78,6 @@ class CanonicalKeypointDetector(nn.Module):
             jacobian = jacobian.view(final_shape[0], final_shape[1], 9, -1)
             jacobian = jacobian.sum(dim=-1)
             jacobian = jacobian.reshape(jacobian.shape[0], jacobian.shape[1], 3, 3)
-            out['jacobian'] = jacobian
+            result['jacobian'] = jacobian
 
-        return out
+        return result
