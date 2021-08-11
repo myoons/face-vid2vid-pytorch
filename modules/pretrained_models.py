@@ -71,9 +71,7 @@ class Hopenet(nn.Module):
         pre_pitch = self.fc_pitch(x)
         pre_roll = self.fc_roll(x)
 
-        idx_tensor = torch.arange(66, dtype=torch.float32)
-
-        return pre_yaw, pre_pitch, pre_roll, idx_tensor
+        return pre_yaw, pre_pitch, pre_roll
 
 
 class Vgg19(nn.Module):
