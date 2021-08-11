@@ -91,23 +91,3 @@ class MultiScaleDiscriminator(nn.Module):
             out_dict[f'prediction_map_{scale}'] = outs[-1]
 
         return out_dict
-
-
-if __name__ == '__main__':
-    import yaml, cv2, torch
-
-    with open('../config/vox.yaml') as f:
-        config = yaml.load(f)
-
-    image = cv2.imread('../data/vox/id00017/iJOjkDq6rW8/0001.jpg')
-    image = torch.tensor(image).unsqueeze(0).permute(0, 3, 1, 2).float()
-
-    d = MultiScaleDiscriminator(**config['model_params']['common_params'],
-                                **config['model_params']['multi_scale_discriminator'])
-
-    from modules.util import ImagePyramid
-
-    ip = ImagePyramid(config['model_params']['multi_scale_discriminator']['scales'], 3)
-    inputs = ip(image)
-    out = d(inputs)
-    print('A')

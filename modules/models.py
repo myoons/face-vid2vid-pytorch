@@ -131,15 +131,14 @@ class GeneratorFullModel(nn.Module):
         generated['transformed_kp'] = transformed_kp
 
         if 'equivariance_keypoints' in self.loss_weights:
-            equivariance_keypoints = torch.abs(kp_driving['keypoints'][:, :, :2] - transform.warp_coordinates(
-                transformed_kp['keypoints'][:, :, :2])).mean()
+            equivariance_keypoints = torch.abs(kp_driving['keypoints'][:, :, 1:] - transform.warp_coordinates(transformed_kp['keypoints'][:, :, 1:])).mean()
             loss_values['equivariance_keypoints'] = self.loss_weights['equivariance_keypoints'] * equivariance_keypoints
 
         if 'equivariance_jacobian' in self.loss_weights:
-            jacobian_transformed = torch.matmul(transform.jacobian(transformed_kp['keypoints'][:, :, :2]),
-                                                transformed_kp['jacobian'][:, :, :2, :2])
+            jacobian_transformed = torch.matmul(transform.jacobian(transformed_kp['keypoints'][:, :, 1:]),
+                                                transformed_kp['jacobian'][:, :, 1:, 1:])
 
-            normed_driving = torch.inverse(kp_driving['jacobian'][:, :, :2, :2])
+            normed_driving = torch.inverse(kp_driving['jacobian'][:, :, 1:, 1:])
             normed_transformed = jacobian_transformed
             equivariance_jacobian = torch.matmul(normed_driving, normed_transformed)
 
@@ -149,6 +148,7 @@ class GeneratorFullModel(nn.Module):
 
         """ Keypoint prior loss """
         keypoint_prior = 0.
+
         for keypoint in kp_source['keypoints']:
             points = combinations(keypoint, r=2)
             for (p1, p2) in points:
@@ -159,20 +159,24 @@ class GeneratorFullModel(nn.Module):
             for (p1, p2) in points:
                 keypoint_prior += F.relu(self.train_params['keypoint_distance_threshold'] - torch.dist(p1, p2))
 
-        keypoint_prior += self.l1_loss(torch.mean(self.train_params[:, :, 0]),
-                                       self.train_params['keypoint_depth_target'])
+        for keypoint in kp_driving['keypoints']:
+            mean_depth = torch.mean(keypoint[:, 0])
+            keypoint_prior += self.l1_loss(mean_depth, self.train_params['keypoint_depth_target'])
+
         loss_values['keypoint_prior'] = self.loss_weights['keypoint_prior'] * keypoint_prior
 
         """ Head pose loss """
         head_pose = 0.
         yaw_target_source, pitch_target_source, roll_target_source = self.pretrained_hopenet(x['source'])
-        yaw_target_driving, pitch_target_driving, roll_target_driving = self.pretrained_hopenet(x['source'])
+        yaw_target_driving, pitch_target_driving, roll_target_driving = self.pretrained_hopenet(x['driving'])
 
         idx_tensor = torch.arange(self.train_params['num_bins'], dtype=torch.float32).cuda()
-        _, (yaw_target_source, pitch_target_source, roll_target_source) = self.get_rotation_matrix(yaw_target_source,
-                                                                                                   pitch_target_source,
-                                                                                                   roll_target_source,
-                                                                                                   idx_tensor)
+
+        _, (yaw_target_source, pitch_target_source, roll_target_source) = self.get_rotation_matrix(
+            yaw_target_source,
+            pitch_target_source,
+            roll_target_source,
+            idx_tensor)
         _, (yaw_target_driving, pitch_target_driving, roll_target_driving) = self.get_rotation_matrix(
             yaw_target_driving,
             pitch_target_driving,
@@ -197,7 +201,8 @@ class GeneratorFullModel(nn.Module):
         canonical_keypoint = self.canonical_keypoint_detector(x['source'])
         kp_source, kp_driving = self.get_keypoint(x['source'], x['driving'], canonical_keypoint)
 
-        generated = self.occlusion_aware_generator(source_feature=appearance_feature, kp_source=kp_source, kp_driving=kp_driving)
+        generated = self.occlusion_aware_generator(source_feature=appearance_feature, kp_source=kp_source,
+                                                   kp_driving=kp_driving)
         generated.update({'kp_source': kp_source, 'kp_driving': kp_driving})
 
         pyramid_real = self.pyramid(x['driving'])
@@ -212,7 +217,7 @@ class DiscriminatorFullModel(torch.nn.Module):
     Merge all discriminator related updates into single model for better multi-gpu usage
     """
 
-    def __init__(self,multi_scale_discriminator, generator_output_channels, train_params):
+    def __init__(self, multi_scale_discriminator, generator_output_channels, train_params):
         super(DiscriminatorFullModel, self).__init__()
         self.multi_scale_discriminator = multi_scale_discriminator
         self.train_params = train_params
