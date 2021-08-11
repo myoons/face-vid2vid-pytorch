@@ -60,7 +60,7 @@ class MotionFieldEstimator(nn.Module):
 
     def create_sparse_motions(self, source_feature, kp_source, kp_driving):
         batch_size, _, d, h, w = source_feature.shape
-        identity_grid = make_coordinate_grid((d, h, w), dtype=kp_source['keypoints'].type())
+        identity_grid = make_coordinate_grid((d, h, w), dtype=kp_source['keypoints'].type()).to(source_feature.device)
         identity_grid = identity_grid.view(1, 1, d, h, w, 3)
         coordinate_grid = identity_grid - kp_driving['keypoints'].view(batch_size, self.num_kp, 1, 1, 1, 3)
 

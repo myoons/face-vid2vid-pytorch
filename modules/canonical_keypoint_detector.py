@@ -49,7 +49,7 @@ class CanonicalKeypointDetector(nn.Module):
         """
         shape = heatmap.shape
         heatmap = heatmap.unsqueeze(-1)
-        grid = make_coordinate_grid(shape[2:], dtype=heatmap.type()).unsqueeze(0).unsqueeze(0)
+        grid = make_coordinate_grid(shape[2:], dtype=heatmap.type()).unsqueeze(0).unsqueeze(0).to(heatmap.device)
         keypoints = (heatmap * grid).sum(dim=(2, 3, 4))
         kp = {'keypoints': keypoints}
 

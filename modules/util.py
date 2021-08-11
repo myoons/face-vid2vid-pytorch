@@ -14,6 +14,8 @@ def kp2gaussian(kp, spatial_size, kp_variance):
     number_of_leading_dimensions = len(mean.shape) - 1
 
     coordinate_grid = make_coordinate_grid(spatial_size, mean.type())
+    coordinate_grid = coordinate_grid.to(mean.device)
+
     shape = (1,) * number_of_leading_dimensions + coordinate_grid.shape
     coordinate_grid = coordinate_grid.view(*shape)
     repeats = mean.shape[:number_of_leading_dimensions] + (1, 1, 1, 1)
@@ -84,7 +86,7 @@ class Transform:
             self.tps = False
 
     def transform_frame(self, frame):
-        grid = make_coordinate_grid_2d(frame.shape[2:], dtype=frame.dtype).unsqueeze(0)
+        grid = make_coordinate_grid_2d(frame.shape[2:], dtype=frame.dtype).unsqueeze(0).to(frame.device)
         grid = grid.view(1, frame.shape[2] * frame.shape[3], 2)
         grid = self.warp_coordinates(grid).view(self.batch_size, frame.shape[2], frame.shape[3], 2)
         return F.grid_sample(frame, grid, padding_mode="reflection")
