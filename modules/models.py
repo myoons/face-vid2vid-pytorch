@@ -161,7 +161,7 @@ class GeneratorFullModel(nn.Module):
 
         for keypoint in kp_driving['keypoints']:
             mean_depth = torch.mean(keypoint[:, 0])
-            keypoint_prior += self.l1_loss(mean_depth, self.train_params['keypoint_depth_target'])
+            keypoint_prior += torch.abs(mean_depth - self.train_params['keypoint_depth_target'])
 
         loss_values['keypoint_prior'] = self.loss_weights['keypoint_prior'] * keypoint_prior
 
