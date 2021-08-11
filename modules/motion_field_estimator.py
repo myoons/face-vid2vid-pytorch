@@ -52,6 +52,9 @@ class MotionFieldEstimator(nn.Module):
 
         # adding background feature
         zeros = torch.zeros(heatmap.shape[0], 1, spatial_size[0], spatial_size[1], spatial_size[2], dtype=heatmap.dtype)
+        if torch.cuda.is_available():
+            zeros = zeros.cuda()
+
         heatmap = torch.cat([zeros, heatmap], dim=1)
         heatmap = heatmap.unsqueeze(2)
         return heatmap

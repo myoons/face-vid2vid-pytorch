@@ -45,6 +45,9 @@ def make_coordinate_grid(spatial_size, dtype):
     yy = y.view(1, 1, -1).repeat(d, w, 1)
 
     meshed = torch.cat([zz.unsqueeze_(3), xx.unsqueeze_(3), yy.unsqueeze_(3)], dim=3)
+    if torch.cuda.is_available():
+        meshed = meshed.cuda()
+
     return meshed
 
 
@@ -62,7 +65,7 @@ def make_coordinate_grid_2d(spatial_size, dtype):
     xx = x.view(1, -1).repeat(h, 1)
     yy = y.view(-1, 1).repeat(1, w)
 
-    meshed = torch.cat([xx.unsqueeze_(2), yy.unsqueeze_(2)], 2)
+    meshed = torch.cat([xx.unsqueeze_(2), yy.unsqueeze_(2)], dim=2)
     return meshed
 
 
@@ -89,6 +92,7 @@ class Transform:
         grid = self.warp_coordinates(grid).view(self.batch_size, frame.shape[2], frame.shape[3], 2)
         return F.grid_sample(frame, grid, padding_mode="reflection")
 
+    # TODO() : 학습 완료후 시각화 필요
     def warp_coordinates(self, coordinates):
         theta = self.theta.type(coordinates.type())
         theta = theta.unsqueeze(1)

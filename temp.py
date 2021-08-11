@@ -63,6 +63,7 @@ if __name__ == '__main__':
 
     x = {'source': torch.rand((1, 3, 128, 128)).detach(),
          'driving': torch.rand((1, 3, 128, 128)).detach()}
+    
     with torch.no_grad():
         g_loss, generated = generator_full(x)
         print('temp')
