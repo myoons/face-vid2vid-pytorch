@@ -3,3 +3,4 @@ __pycache__/
 data/vox/
 data/vox_mp4/
 pretrained/
+log/

@@ -5,7 +5,7 @@ warnings.simplefilter("ignore", UserWarning)
 import torch
 from torch.utils.data import DataLoader
 
-from tqdm import tqdm
+from tqdm import trange, tqdm
 from torch.optim.lr_scheduler import MultiStepLR
 from modules.models import GeneratorFullModel, DiscriminatorFullModel
 
@@ -87,7 +87,7 @@ def train(config, appearance_feature_extractor, canonical_keypoint_detector, hea
 
     if 'num_repeats' in train_params or train_params['num_repeats'] != 1:
         dataset = DatasetRepeater(dataset, train_params['num_repeats'])
-    dataloader = DataLoader(dataset, batch_size=train_params['batch_size'], shuffle=True, num_workers=6, drop_last=True)
+    dataloader = DataLoader(dataset, batch_size=train_params['batch_size'], shuffle=True, num_workers=0, drop_last=True)
 
     generator_full = GeneratorFullModel(appearance_feature_extractor=appearance_feature_extractor,
                                         canonical_keypoint_detector=canonical_keypoint_detector,
@@ -105,8 +105,8 @@ def train(config, appearance_feature_extractor, canonical_keypoint_detector, hea
 
     with Logger(log_dir=log_dir, checkpoint_freq=train_params['checkpoint_freq']) as logger:
 
-        for epoch in tqdm(start_epoch, total=train_params['num_epochs']):
-            for x in dataloader:
+        for epoch in trange(start_epoch, train_params['num_epochs']):
+            for x in tqdm(dataloader, total=len(dataloader)):
                 losses_generator, generated = generator_full(x)
 
                 loss_values = [val.mean() for val in losses_generator.values()]
@@ -147,5 +147,5 @@ def train(config, appearance_feature_extractor, canonical_keypoint_detector, hea
                              'optimizer_canonical_keypoint_detector': optimizer_canonical_keypoint_detector,
                              'optimizer_head_expression_estimator': optimizer_head_expression_estimator,
                              'optimizer_occlusion_aware_generator': optimizer_occlusion_aware_generator,
-                             'optimizer_multi_scale_discriminator': optimizer_multi_scale_discriminator, }
+                             'optimizer_multi_scale_discriminator': optimizer_multi_scale_discriminator}
                          )
