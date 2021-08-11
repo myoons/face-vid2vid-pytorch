@@ -167,8 +167,8 @@ class GeneratorFullModel(nn.Module):
 
         """ Head pose loss """
         head_pose = 0.
-        yaw_target_source, pitch_target_source, roll_target_source = self.pretrained_hopenet(x['source'])
-        yaw_target_driving, pitch_target_driving, roll_target_driving = self.pretrained_hopenet(x['driving'])
+        yaw_target_source, pitch_target_source, roll_target_source = self.hopenet(x['source'])
+        yaw_target_driving, pitch_target_driving, roll_target_driving = self.hopenet(x['driving'])
 
         idx_tensor = torch.arange(self.train_params['num_bins'], dtype=torch.float32).cuda()
 
@@ -183,9 +183,9 @@ class GeneratorFullModel(nn.Module):
             roll_target_driving,
             idx_tensor)
 
-        head_pose += self.l1_loss(torch.cat([kp_source['yaw'], kp_source['pitch'], kp_source['roll']], dim=-1),
+        head_pose += self.l1_loss(torch.cat([euler_angle_s[0], euler_angle_s[1], euler_angle_s[2]], dim=-1),
                                   torch.cat([yaw_target_source, pitch_target_source, roll_target_source], dim=-1))
-        head_pose += self.l1_loss(torch.cat([kp_driving['yaw'], kp_driving['pitch'], kp_driving['roll']], dim=-1),
+        head_pose += self.l1_loss(torch.cat([euler_angle_d[0], euler_angle_d[1]],euler_angle_d[2]], dim=-1),
                                   torch.cat([yaw_target_driving, pitch_target_driving, roll_target_driving], dim=-1))
         loss_values['head_pose'] = self.loss_weights['head_pose'] * head_pose
 
