@@ -67,7 +67,7 @@ class GeneratorFullModel(nn.Module):
             torch.stack([-sp, cp * sr, cp * cr], dim=1)
         ], dim=1).unsqueeze(1).repeat(1, self.num_kp, 1, 1)
 
-        return rotation_matrix, (yaw, pitch, roll)
+        return rotation_matrix, torch.stack([yaw, pitch, roll], dim=1)
 
     def get_keypoint(self, img_source, img_driving, canonical_keypoint):
         (yaw_s, pitch_s, roll_s), translation_s, deformation_s = self.head_expression_estimator(img_source)
@@ -83,10 +83,11 @@ class GeneratorFullModel(nn.Module):
         rotated_keypoints_d = torch.matmul(rotation_d, canonical_keypoint['keypoints'].unsqueeze(-1)).squeeze(-1)
 
         kp_source['keypoints'] = rotated_keypoints_s + translation_s + deformation_s
-        kp_source['jacobian'] = torch.matmul(rotation_s, canonical_keypoint['jacobian'])
-
         kp_driving['keypoints'] = rotated_keypoints_d + translation_d + deformation_d
-        kp_driving['jacobian'] = torch.matmul(rotation_d, canonical_keypoint['jacobian'])
+
+        if 'jacobian' in kp_driving:
+            kp_source['jacobian'] = torch.matmul(rotation_s, canonical_keypoint['jacobian'])
+            kp_driving['jacobian'] = torch.matmul(rotation_d, canonical_keypoint['jacobian'])
 
         return kp_source, kp_driving
 
@@ -134,7 +135,7 @@ class GeneratorFullModel(nn.Module):
             equivariance_keypoints = torch.abs(kp_driving['keypoints'][:, :, 1:] - transform.warp_coordinates(transformed_kp['keypoints'][:, :, 1:])).mean()
             loss_values['equivariance_keypoints'] = self.loss_weights['equivariance_keypoints'] * equivariance_keypoints
 
-        if 'equivariance_jacobian' in self.loss_weights:
+        if 'jacobian' in transformed_kp and 'equivariance_jacobian' in self.loss_weights:
             jacobian_transformed = torch.matmul(transform.jacobian(transformed_kp['keypoints'][:, :, 1:]),
                                                 transformed_kp['jacobian'][:, :, 1:, 1:])
 
@@ -172,21 +173,20 @@ class GeneratorFullModel(nn.Module):
 
         idx_tensor = torch.arange(self.train_params['num_bins'], dtype=torch.float32).cuda()
 
-        _, (yaw_target_source, pitch_target_source, roll_target_source) = self.get_rotation_matrix(
-            yaw_target_source,
-            pitch_target_source,
-            roll_target_source,
-            idx_tensor)
-        _, (yaw_target_driving, pitch_target_driving, roll_target_driving) = self.get_rotation_matrix(
-            yaw_target_driving,
-            pitch_target_driving,
-            roll_target_driving,
-            idx_tensor)
+        _, target_euler_angle_source = self.get_rotation_matrix(yaw_target_source,
+                                                                pitch_target_source,
+                                                                roll_target_source,
+                                                                idx_tensor)
+        _, target_euler_angle_driving = self.get_rotation_matrix(yaw_target_driving,
+                                                                 pitch_target_driving,
+                                                                 roll_target_driving,
+                                                                 idx_tensor)
 
-        head_pose += self.l1_loss(torch.cat([euler_angle_s[0], euler_angle_s[1], euler_angle_s[2]], dim=-1),
-                                  torch.cat([yaw_target_source, pitch_target_source, roll_target_source], dim=-1))
-        head_pose += self.l1_loss(torch.cat([euler_angle_d[0], euler_angle_d[1]],euler_angle_d[2]], dim=-1),
-                                  torch.cat([yaw_target_driving, pitch_target_driving, roll_target_driving], dim=-1))
+        head_pose += self.l1_loss(kp_source['euler_angle'],
+                                  target_euler_angle_source)
+        head_pose += self.l1_loss(kp_driving['euler_angle'],
+                                  target_euler_angle_driving)
+
         loss_values['head_pose'] = self.loss_weights['head_pose'] * head_pose
 
         """ Deformation prior loss """

@@ -18,7 +18,7 @@ model_params:
     num_blocks: 5
     temperature: 0.1
     scale_factor: 1
-    estimate_jacobian: True
+    estimate_jacobian: False
   head_expression_estimator:
     block_expansion: 256
     num_bins: 66
@@ -73,7 +73,7 @@ train_params:
     equivariance_jacobian: 20
     keypoint_prior: 10
     head_pose: 20
-    deformaioin_prior: 5
+    deformation_prior: 5
 
 visualizer_params:
   kp_size: 5
