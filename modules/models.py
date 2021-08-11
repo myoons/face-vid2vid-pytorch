@@ -35,7 +35,6 @@ class GeneratorFullModel(nn.Module):
         self.loss_weights = train_params['loss_weights']
         self.l1_loss = nn.L1Loss()
 
-        self.idx_tensor = torch.arange(self.train_params['num_bins'], dtype=torch.float32)
         self.num_kp = appearance_feature_extractor.num_kp
 
         if 'head_pose' in self.loss_weights:
@@ -45,7 +44,6 @@ class GeneratorFullModel(nn.Module):
             self.vgg = Vgg19()
 
         if torch.cuda.is_available():
-            self.idx_tensor = self.idx_tensor.cuda()
             self.hopenet = self.hopenet.cuda()
             self.vgg = self.vgg.cuda()
 
@@ -69,12 +67,12 @@ class GeneratorFullModel(nn.Module):
 
         return rotation_matrix, torch.stack([yaw, pitch, roll], dim=1)
 
-    def get_keypoint(self, img_source, img_driving, canonical_keypoint):
+    def get_keypoint(self, img_source, img_driving, canonical_keypoint, idx_tensor):
         (yaw_s, pitch_s, roll_s), translation_s, deformation_s = self.head_expression_estimator(img_source)
         (yaw_d, pitch_d, roll_d), translation_d, deformation_d = self.head_expression_estimator(img_driving)
 
-        rotation_s, euler_angle_s = self.get_rotation_matrix(yaw_s, pitch_s, roll_s, self.idx_tensor)
-        rotation_d, euler_angle_d = self.get_rotation_matrix(yaw_d, pitch_d, roll_d, self.idx_tensor)
+        rotation_s, euler_angle_s = self.get_rotation_matrix(yaw_s, pitch_s, roll_s, idx_tensor)
+        rotation_d, euler_angle_d = self.get_rotation_matrix(yaw_d, pitch_d, roll_d, idx_tensor)
 
         kp_source = dict(deformation=deformation_s, euler_angle=euler_angle_s)
         kp_driving = dict(deformation=deformation_d, euler_angle=euler_angle_d)
@@ -171,7 +169,7 @@ class GeneratorFullModel(nn.Module):
         yaw_target_source, pitch_target_source, roll_target_source = self.hopenet(x['source'])
         yaw_target_driving, pitch_target_driving, roll_target_driving = self.hopenet(x['driving'])
 
-        idx_tensor = torch.arange(self.train_params['num_bins'], dtype=torch.float32).cuda()
+        idx_tensor = torch.arange(self.train_params['num_bins'], dtype=torch.float32)
 
         _, target_euler_angle_source = self.get_rotation_matrix(yaw_target_source,
                                                                 pitch_target_source,
@@ -199,7 +197,9 @@ class GeneratorFullModel(nn.Module):
     def forward(self, x):
         appearance_feature = self.appearance_feature_extractor(x['source'])
         canonical_keypoint = self.canonical_keypoint_detector(x['source'])
-        kp_source, kp_driving = self.get_keypoint(x['source'], x['driving'], canonical_keypoint)
+
+        idx_tensor = torch.arange(self.train_params['num_bins'], dtype=torch.float32)
+        kp_source, kp_driving = self.get_keypoint(x['source'], x['driving'], canonical_keypoint, idx_tensor)
 
         generated = self.occlusion_aware_generator(source_feature=appearance_feature, kp_source=kp_source,
                                                    kp_driving=kp_driving)
@@ -235,9 +235,6 @@ class DiscriminatorFullModel(torch.nn.Module):
             grid = torch.FloatTensor(inputs.shape).fill_(1.0)
         else:
             grid = torch.FloatTensor(inputs.shape).fill_(0.0)
-
-        if torch.cuda.is_available():
-            grid = grid.cuda()
 
         return grid
 
