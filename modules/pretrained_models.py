@@ -3,7 +3,6 @@ import torchvision
 import torch.nn as nn
 from torchvision import models
 
-import math
 import numpy as np
 
 

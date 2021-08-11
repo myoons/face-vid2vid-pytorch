@@ -1,7 +1,6 @@
 import torch.nn as nn
 import torch.nn.functional as F
 from modules.blocks import DownBlock2d, ResBlock3d
-from sync_batchnorm import SynchronizedBatchNorm2d as BatchNorm2d
 
 
 class AppearanceFeatureExtractor(nn.Module):
@@ -18,7 +17,7 @@ class AppearanceFeatureExtractor(nn.Module):
 
         self.first = nn.Sequential(
             nn.Conv2d(in_channels=num_channels, out_channels=block_expansion, kernel_size=(7, 7), padding=(3, 3)),
-            BatchNorm2d(block_expansion)
+            nn.BatchNorm2d(block_expansion)
         )
 
         self.down_blocks = nn.ModuleList([DownBlock2d(in_features=block_expansion * (2 ** i),

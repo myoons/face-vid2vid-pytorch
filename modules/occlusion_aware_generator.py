@@ -3,7 +3,6 @@ import torch.nn as nn
 import torch.nn.functional as F
 from modules.blocks import ResBlock2d, UpBlock2d
 from modules.motion_field_estimator import MotionFieldEstimator
-from sync_batchnorm import SynchronizedBatchNorm2d as BatchNorm2d
 
 
 class OcclusionAwareGenerator(nn.Module):
@@ -24,7 +23,7 @@ class OcclusionAwareGenerator(nn.Module):
 
         self.first = nn.Sequential(
             nn.Conv2d(depth * source_channels, block_expansion * 4, kernel_size=(3, 3), padding=(1, 1)),
-            BatchNorm2d(block_expansion * 4),
+            nn.BatchNorm2d(block_expansion * 4),
             nn.LeakyReLU(),
             nn.Conv2d(block_expansion * 4, block_expansion * 4, kernel_size=(1, 1))
         )
