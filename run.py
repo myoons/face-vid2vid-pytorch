@@ -44,6 +44,9 @@ def init_model(model_name, configs):
     model = MODELS[model_name](**configs['model_params'][model_name],
                                **configs['model_params']['common_params'])
 
+    if torch.cuda.is_available():
+        model.to(args.device_ids[0])
+
     if args.verbose:
         print(model)
 

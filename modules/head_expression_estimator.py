@@ -1,5 +1,6 @@
 """ Head pose & Expression Estimator module which estimates the rotation angles, translation vector, expression deformations from images """
 
+import torch
 import torch.nn as nn
 from modules.blocks import ResBottleneck
 from sync_batchnorm import SynchronizedBatchNorm2d as BatchNorm2d
@@ -59,4 +60,6 @@ class HeadExpressionEstimator(nn.Module):
         translation = translation.unsqueeze(-2).repeat(1, self.num_kp, 1)
         deformation = deformation.view(-1, self.num_kp, 3)
 
-        return (yaw, pitch, roll), translation, deformation
+        idx_tensor = torch.arange(66, dtype=torch.float32)
+
+        return (yaw, pitch, roll), translation, deformation, idx_tensor

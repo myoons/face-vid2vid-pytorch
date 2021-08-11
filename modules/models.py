@@ -67,9 +67,9 @@ class GeneratorFullModel(nn.Module):
 
         return rotation_matrix, torch.stack([yaw, pitch, roll], dim=1)
 
-    def get_keypoint(self, img_source, img_driving, canonical_keypoint, idx_tensor):
-        (yaw_s, pitch_s, roll_s), translation_s, deformation_s = self.head_expression_estimator(img_source)
-        (yaw_d, pitch_d, roll_d), translation_d, deformation_d = self.head_expression_estimator(img_driving)
+    def get_keypoint(self, img_source, img_driving, canonical_keypoint):
+        (yaw_s, pitch_s, roll_s), translation_s, deformation_s, idx_tensor = self.head_expression_estimator(img_source)
+        (yaw_d, pitch_d, roll_d), translation_d, deformation_d, idx_tensor = self.head_expression_estimator(img_driving)
 
         rotation_s, euler_angle_s = self.get_rotation_matrix(yaw_s, pitch_s, roll_s, idx_tensor)
         rotation_d, euler_angle_d = self.get_rotation_matrix(yaw_d, pitch_d, roll_d, idx_tensor)
@@ -166,10 +166,8 @@ class GeneratorFullModel(nn.Module):
 
         """ Head pose loss """
         head_pose = 0.
-        yaw_target_source, pitch_target_source, roll_target_source = self.hopenet(x['source'])
-        yaw_target_driving, pitch_target_driving, roll_target_driving = self.hopenet(x['driving'])
-
-        idx_tensor = torch.arange(self.train_params['num_bins'], dtype=torch.float32)
+        yaw_target_source, pitch_target_source, roll_target_source, idx_tensor = self.hopenet(x['source'])
+        yaw_target_driving, pitch_target_driving, roll_target_driving, idx_tensor = self.hopenet(x['driving'])
 
         _, target_euler_angle_source = self.get_rotation_matrix(yaw_target_source,
                                                                 pitch_target_source,
@@ -198,8 +196,7 @@ class GeneratorFullModel(nn.Module):
         appearance_feature = self.appearance_feature_extractor(x['source'])
         canonical_keypoint = self.canonical_keypoint_detector(x['source'])
 
-        idx_tensor = torch.arange(self.train_params['num_bins'], dtype=torch.float32)
-        kp_source, kp_driving = self.get_keypoint(x['source'], x['driving'], canonical_keypoint, idx_tensor)
+        kp_source, kp_driving = self.get_keypoint(x['source'], x['driving'], canonical_keypoint)
 
         generated = self.occlusion_aware_generator(source_feature=appearance_feature, kp_source=kp_source,
                                                    kp_driving=kp_driving)
