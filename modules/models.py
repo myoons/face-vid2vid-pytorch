@@ -203,8 +203,8 @@ class GeneratorFullModel(nn.Module):
         pyramid_real = self.pyramid(x['driving'])
         pyramid_generated = self.pyramid(generated['prediction'])
 
-        # loss_values = self.calculate_loss_values(x, pyramid_real, pyramid_generated, generated, kp_source, kp_driving)
-        return dict(), generated
+        loss_values = self.calculate_loss_values(x, pyramid_real, pyramid_generated, generated, kp_source, kp_driving)
+        return loss_values, generated
 
 
 class DiscriminatorFullModel(torch.nn.Module):

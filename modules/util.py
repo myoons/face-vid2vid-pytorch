@@ -45,6 +45,9 @@ def make_coordinate_grid(spatial_size, dtype):
     yy = y.view(1, 1, -1).repeat(d, w, 1)
 
     meshed = torch.cat([zz.unsqueeze_(3), xx.unsqueeze_(3), yy.unsqueeze_(3)], dim=3)
+    if torch.cuda.is_available():
+        meshed = meshed.cuda()
+   
     return meshed
 
 
