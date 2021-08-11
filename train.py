@@ -4,6 +4,7 @@ warnings.simplefilter("ignore", UserWarning)
 
 import torch
 from torch.utils.data import DataLoader
+from torch.nn import DataParallel
 
 from tqdm import trange, tqdm
 from torch.optim.lr_scheduler import MultiStepLR
@@ -99,9 +100,13 @@ def train(config, appearance_feature_extractor, canonical_keypoint_detector, hea
                                                 generator_output_channels=occlusion_aware_generator.output_channels,
                                                 train_params=train_params)
 
+    # if torch.cuda.is_available():
+    #     generator_full = DataParallelWithCallback(generator_full, device_ids=device_ids)
+    #     discriminator_full = DataParallelWithCallback(discriminator_full, device_ids=device_ids)
+
     if torch.cuda.is_available():
-        generator_full = DataParallelWithCallback(generator_full, device_ids=device_ids)
-        discriminator_full = DataParallelWithCallback(discriminator_full, device_ids=device_ids)
+        generator_full = DataParallel(generator_full)
+        discriminator_full = DataParallel(discriminator_full)
 
     with Logger(log_dir=log_dir, checkpoint_freq=train_params['checkpoint_freq']) as logger:
 
