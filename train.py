@@ -6,13 +6,13 @@ import torch
 from torch.utils.data import DataLoader
 from torch.nn import DataParallel
 
+from varname import nameof
 from tqdm import trange, tqdm
 from torch.optim.lr_scheduler import MultiStepLR
 from modules.models import GeneratorFullModel, DiscriminatorFullModel
 
 from logger import Logger
 from frames_dataset import DatasetRepeater
-from sync_batchnorm import DataParallelWithCallback
 
 
 def train(config, appearance_feature_extractor, canonical_keypoint_detector, head_expression_estimator,
@@ -100,17 +100,16 @@ def train(config, appearance_feature_extractor, canonical_keypoint_detector, hea
                                                 generator_output_channels=occlusion_aware_generator.output_channels,
                                                 train_params=train_params)
 
-    #if torch.cuda.is_available():
-    #    generator_full = DataParallelWithCallback(generator_full, device_ids=device_ids)
-    #    discriminator_full = DataParallelWithCallback(discriminator_full, device_ids=device_ids)
-
     if torch.cuda.is_available():
         generator_full = DataParallel(generator_full)
         discriminator_full = DataParallel(discriminator_full)
 
+    global_step = 0
     with Logger(log_dir=log_dir, checkpoint_freq=train_params['checkpoint_freq']) as logger:
 
         for epoch in trange(start_epoch, train_params['num_epochs']):
+            learning_rates = {nameof(optimizer): optimizer.param_groups[0]['lr'] for optimizer in optimizers}
+
             for x in tqdm(dataloader, total=len(dataloader)):
                 losses_generator, generated = generator_full(x)
 
@@ -136,7 +135,9 @@ def train(config, appearance_feature_extractor, canonical_keypoint_detector, hea
 
                 losses_generator.update(losses_discriminator)
                 losses = {key: value.mean().detach().data.cpu().numpy() for key, value in losses_generator.items()}
-                logger.log_iter(losses=losses)
+
+                global_step += 1
+                logger.log_iter(losses=losses, learning_rates=learning_rates, step=global_step)
 
             for scheduler in schedulers:
                 scheduler.step()
@@ -152,5 +153,6 @@ def train(config, appearance_feature_extractor, canonical_keypoint_detector, hea
                              'optimizer_canonical_keypoint_detector': optimizer_canonical_keypoint_detector,
                              'optimizer_head_expression_estimator': optimizer_head_expression_estimator,
                              'optimizer_occlusion_aware_generator': optimizer_occlusion_aware_generator,
-                             'optimizer_multi_scale_discriminator': optimizer_multi_scale_discriminator}
-                         )
+                             'optimizer_multi_scale_discriminator': optimizer_multi_scale_discriminator},
+                         inp=x,
+                         out=generated)
