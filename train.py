@@ -95,11 +95,13 @@ def train(config, appearance_feature_extractor, canonical_keypoint_detector, hea
                                         occlusion_aware_generator=occlusion_aware_generator,
                                         multi_scale_discriminator=multi_scale_discriminator,
                                         train_params=train_params)
+                                        
     discriminator_full = DiscriminatorFullModel(multi_scale_discriminator=multi_scale_discriminator,
                                                 generator_output_channels=occlusion_aware_generator.output_channels,
                                                 train_params=train_params)
 
     if torch.cuda.is_available():
+        print('uploading model to gpus')
         generator_full = DataParallel(generator_full)
         discriminator_full = DataParallel(discriminator_full)
 

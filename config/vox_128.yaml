@@ -38,7 +38,7 @@ model_params:
       scale_factor: 1
       kp_variance: 0.01
   multi_scale_discriminator:
-    scales: [1, 0.5]
+    scales: [1]
     block_expansion: 64
     max_features: 512
     negative: 0.2
@@ -59,21 +59,23 @@ train_params:
   pretrained_hopenet_dir: pretrained/hopenet.pkl
   batch_size: 48
   scales: [1, 0.5, 0.25, 0.125]
-  checkpoint_freq: 10
+  checkpoint_freq: 1
   transform_params:
     sigma_affine: 0.05
     sigma_tps: 0.005
     points_tps: 5
   loss_weights:
+    perceptual: 10
     generator_gan: 1
     discriminator_gan: 1
-    feature_matching: [10, 10, 10, 10]
-    perceptual: [10, 10, 10, 10, 10]
+    feature_matching: 10
     equivariance_keypoints: 20
     equivariance_jacobian: 20
     keypoint_prior: 10
     head_pose: 20
     deformation_prior: 5
+    perceptual_layers: [0.03125, 0.0625, 0.125, 0.25, 1.0]
+
 
 visualizer_params:
   kp_size: 3

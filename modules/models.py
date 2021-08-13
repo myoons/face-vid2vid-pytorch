@@ -3,9 +3,7 @@ import torch.nn as nn
 import torch.nn.functional as F
 
 from math import pi
-from itertools import combinations
-
-from modules.pretrained_models import Vgg19, Hopenet
+from modules.pretrained_models import Vgg19, Hopenet, FaceVgg
 from modules.util import Transform, ImagePyramid
 
 
@@ -33,20 +31,22 @@ class GeneratorFullModel(nn.Module):
             self.pyramid = self.pyramid.cuda()
 
         self.loss_weights = train_params['loss_weights']
-        self.l1_loss = nn.L1Loss()
 
         self.idx_tensor = torch.arange(self.train_params['num_bins'], dtype=torch.float32)
         self.num_kp = appearance_feature_extractor.num_kp
 
         if 'head_pose' in self.loss_weights:
-            self.hopenet = Hopenet()
+            self.hopenet = Hopenet(requires_grad=False, weight_dir='pretrained/hopenet.pkl')
 
         if 'perceptual' in self.loss_weights != 0:
-            self.vgg = Vgg19()
+            self.vgg = Vgg19(requires_grad=False)
+            self.face_vgg = FaceVgg(requires_grad=False, weight_dir='pretrained/face_vgg.pth')
 
         if torch.cuda.is_available():
             self.hopenet = self.hopenet.cuda()
             self.vgg = self.vgg.cuda()
+            self.face_vgg = self.face_vgg.cuda()
+
 
     def get_rotation_matrix(self, yaw, pitch, roll, idx_tensor):
         idx_tensor = idx_tensor.to(yaw.device)
@@ -101,28 +101,30 @@ class GeneratorFullModel(nn.Module):
             vgg_real = self.vgg(pyramid_real[f'prediction_{scale}'])
             vgg_generated = self.vgg(pyramid_generated[f'prediction_{scale}'])
 
-            for i, weight in enumerate(self.loss_weights['perceptual']):
-                value = torch.abs(vgg_real[i] - vgg_generated[i].detach()).mean()
-                perceptual += weight * value
-        loss_values['perceptual'] = perceptual
+            for i, layer_weight in enumerate(self.loss_weights['perceptual_layers']):
+                perceptual += layer_weight * torch.abs(vgg_real[i] - vgg_generated[i].detach()).mean()
+        
+        face_vgg_real = self.face_vgg(pyramid_real['prediction_1'])
+        face_vgg_generated = self.face_vgg(pyramid_generated['prediction_1'])
+        perceptual += torch.abs(face_vgg_real - face_vgg_generated.detach()).mean()
+
+        loss_values['perceptual'] = self.loss_weights['perceptual'] * perceptual
 
         """ GAN loss """
         generator_gan = 0.
+        feature_matching = 0.
         out_dict_real = self.multi_scale_discriminator(pyramid_real)
         out_dict_generated = self.multi_scale_discriminator(pyramid_generated)
-        for scale in self.disc_scales:
-            generator_gan -= out_dict_generated[f'prediction_map_{scale}'].mean() * self.loss_weights['generator_gan']
-        loss_values['generator_gan'] = generator_gan
 
-        feature_matching = 0.
+        for scale in self.disc_scales:
+            generator_gan -= out_dict_generated[f'prediction_map_{scale}'].mean()
+        loss_values['generator_gan'] = self.loss_weights['generator_gan'] * generator_gan
+
         for scale in self.disc_scales:
             key = f'feature_maps_{scale}'
             for i, (feature_real, feature_generated) in enumerate(zip(out_dict_real[key], out_dict_generated[key])):
-                if self.loss_weights['feature_matching'][i] == 0:
-                    continue
-                value = torch.abs(feature_real - feature_generated).mean()
-                feature_matching += self.loss_weights['feature_matching'][i] * value
-        loss_values['feature_matching'] = feature_matching
+                feature_matching += torch.abs(feature_real - feature_generated).mean()
+        loss_values['feature_matching'] = self.loss_weights['feature_matching'] * feature_matching
 
         """ Equivariance loss """
         transform = Transform(x['driving'].shape[0], **self.train_params['transform_params'])
@@ -133,7 +135,7 @@ class GeneratorFullModel(nn.Module):
         generated['transformed_kp'] = transformed_kp
 
         if 'equivariance_keypoints' in self.loss_weights:
-            equivariance_keypoints = torch.abs(kp_driving['keypoints'][:, :, 1:] - transform.warp_coordinates(transformed_kp['keypoints'][:, :, 1:])).mean()
+            equivariance_keypoints = torch.abs(kp_driving['keypoints'][..., 1:] - transform.warp_coordinates(transformed_kp['keypoints'][..., 1:])).mean()
             loss_values['equivariance_keypoints'] = self.loss_weights['equivariance_keypoints'] * equivariance_keypoints
 
         if 'jacobian' in transformed_kp and 'equivariance_jacobian' in self.loss_weights:
@@ -151,20 +153,16 @@ class GeneratorFullModel(nn.Module):
         """ Keypoint prior loss """
         keypoint_prior = 0.
 
-        for keypoint in kp_source['keypoints']:
-            points = combinations(keypoint, r=2)
-            for (p1, p2) in points:
-                keypoint_prior += F.relu(self.train_params['keypoint_distance_threshold'] - torch.dist(p1, p2))
+        keypoints_repeat = torch.cat([kp_source['keypoints'], kp_driving['keypoints']], dim=0).unsqueeze(2).repeat(1, 1, self.num_kp, 1)
+        keypoints_diff = keypoints_repeat - keypoints_repeat.transpose(1, 2)
+        keypoints_diff = F.relu(0.1 - torch.sum(keypoints_diff * keypoints_diff, dim=-1))
 
-        for keypoint in kp_driving['keypoints']:
-            points = combinations(keypoint, r=2)
-            for (p1, p2) in points:
-                keypoint_prior += F.relu(self.train_params['keypoint_distance_threshold'] - torch.dist(p1, p2))
+        mask = torch.tril(torch.ones_like(keypoints_diff[0]), diagonal=-1)
+        keypoints_diff = keypoints_diff * mask
+        keypoint_prior += torch.sum(keypoints_diff, dim=[1, 2]).mean()
 
-        for keypoint in kp_driving['keypoints']:
-            mean_depth = torch.mean(keypoint[:, 0])
-            keypoint_prior += torch.abs(mean_depth - self.train_params['keypoint_depth_target'])
-
+        mean_depth = torch.mean(torch.cat([kp_source['keypoints'], kp_driving['keypoints']], dim=0)[..., 0], dim=-1)
+        keypoint_prior += torch.norm(mean_depth - self.train_params['keypoint_depth_target'], 2)
         loss_values['keypoint_prior'] = self.loss_weights['keypoint_prior'] * keypoint_prior
 
         """ Head pose loss """
@@ -180,18 +178,15 @@ class GeneratorFullModel(nn.Module):
                                                                  pitch_target_driving,
                                                                  roll_target_driving,
                                                                  self.idx_tensor)
-
-        head_pose += self.l1_loss(kp_source['euler_angle'],
-                                  target_euler_angle_source)
-        head_pose += self.l1_loss(kp_driving['euler_angle'],
-                                  target_euler_angle_driving)
-
+        
+        head_pose += torch.sum(torch.abs(kp_source['euler_angle'] - target_euler_angle_source), dim=-1).mean()
+        head_pose += torch.sum(torch.abs(kp_driving['euler_angle'] - target_euler_angle_driving), dim=-1).mean()
         loss_values['head_pose'] = self.loss_weights['head_pose'] * head_pose
 
         """ Deformation prior loss """
         deformation_prior = 0.
-        deformation_prior += self.l1_loss(kp_source['deformation'], torch.zeros_like(kp_source['deformation']))
-        deformation_prior += self.l1_loss(kp_driving['deformation'], torch.zeros_like(kp_driving['deformation']))
+        deformation_prior += torch.sum(torch.abs(kp_source['deformation']), dim=-1).mean()
+        deformation_prior += torch.sum(torch.abs(kp_driving['deformation']), dim=-1).mean()
         loss_values['deformation_prior'] = self.loss_weights['deformation_prior'] * deformation_prior
         return loss_values
 
@@ -235,9 +230,7 @@ class DiscriminatorFullModel(torch.nn.Module):
         else:
             grid = torch.FloatTensor(inputs.shape).fill_(0.0)
 
-        if torch.cuda.is_available():
-            grid = grid.cuda()
-
+        grid = grid.to(inputs.device)
         return grid
 
     def calculate_loss_values(self, out_dict_real, out_dict_generated):
@@ -246,11 +239,9 @@ class DiscriminatorFullModel(torch.nn.Module):
         discriminator_gan = 0.
         for scale in self.scales:
             patch_grid_real = self.get_grid(out_dict_real[f'prediction_map_{scale}'], is_real=True)
-            discriminator_gan += F.relu(patch_grid_real - out_dict_real[f'prediction_map_{scale}']).mean() \
-                                 * self.loss_weights['discriminator_gan']
-            discriminator_gan += F.relu(patch_grid_real + out_dict_generated[f'prediction_map_{scale}']).mean() \
-                                 * self.loss_weights['discriminator_gan']
-
+            discriminator_gan += self.loss_weights['discriminator_gan'] * F.relu(patch_grid_real - out_dict_real[f'prediction_map_{scale}']).mean()
+            discriminator_gan += self.loss_weights['discriminator_gan'] * F.relu(patch_grid_real + out_dict_generated[f'prediction_map_{scale}']).mean()
+                                 
         loss_values['discriminator_gan'] = discriminator_gan
         return loss_values
 
