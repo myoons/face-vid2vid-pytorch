@@ -121,7 +121,7 @@ class Logger:
             self.names = list(losses.keys())
         self.loss_list.append(list(losses.values()))
 
-        self.log_tensorboard(losses, learning_rates)
+        self.log_tensorboard(losses, learning_rates, step)
 
     def log_epoch(self, epoch, models, inp, out):
         self.epoch = epoch
@@ -134,10 +134,10 @@ class Logger:
 
     def log_tensorboard(self, losses, learning_rates, step):
         for key, value in losses.items():
-            self.tensorboard_writer.add_scalar(key, value, step)
+            self.tensorboard_writer.add_scalar(f'loss/{key}', value, step)
 
         for key, value in learning_rates.items():
-            self.tensorboard_writer.add_scalar(key, value, step)
+            self.tensorboard_writer.add_scalar(f'lr/{key}', value, step)
 
         self.tensorboard_writer.add_scalars('all_losses', losses, step)
         self.tensorboard_writer.add_scalars('all_lrs', learning_rates, step)

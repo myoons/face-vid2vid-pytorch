@@ -76,6 +76,6 @@ train_params:
     deformation_prior: 5
 
 visualizer_params:
-  kp_size: 5
+  kp_size: 3
   draw_border: True
   colormap: 'gist_rainbow'

@@ -35,11 +35,10 @@ def train(config, appearance_feature_extractor, canonical_keypoint_detector, hea
                                                            lr=train_params['lr_multi_scale_discriminator'],
                                                            betas=[0.5, 0.999])
 
-    optimizers = [optimizer_appearance_feature_extractor,
-                  optimizer_canonical_keypoint_detector,
-                  optimizer_head_expression_estimator,
-                  optimizer_occlusion_aware_generator,
-                  optimizer_multi_scale_discriminator]
+    optimizers_g = {'appearance_feature_extractor': optimizer_appearance_feature_extractor,
+                    'canonical_keypoint_detector': optimizer_canonical_keypoint_detector,
+                    'head_expression_estimator': optimizer_head_expression_estimator,
+                    'occlusioin_aware_generator': optimizer_occlusion_aware_generator}
 
     if checkpoint is not None:
         start_epoch = Logger.load_cpk(appearance_feature_extractor,
@@ -105,10 +104,11 @@ def train(config, appearance_feature_extractor, canonical_keypoint_detector, hea
         discriminator_full = DataParallel(discriminator_full)
 
     global_step = 0
-    with Logger(log_dir=log_dir, checkpoint_freq=train_params['checkpoint_freq']) as logger:
+    with Logger(log_dir=log_dir, checkpoint_freq=train_params['checkpoint_freq'], visualizer_params=config['visualizer_params']) as logger:
 
         for epoch in trange(start_epoch, train_params['num_epochs']):
-            learning_rates = {nameof(optimizer): optimizer.param_groups[0]['lr'] for optimizer in optimizers}
+            learning_rates = {key: value.param_groups[0]['lr'] for (key, value) in optimizers_g.items()}
+            learning_rates['multi_scale_discriminator'] = optimizer_multi_scale_discriminator.param_groups[0]['lr']
 
             for x in tqdm(dataloader, total=len(dataloader)):
                 losses_generator, generated = generator_full(x)
@@ -118,7 +118,7 @@ def train(config, appearance_feature_extractor, canonical_keypoint_detector, hea
 
                 loss.backward()
 
-                for optimizer in optimizers[:-1]:
+                for optimizer in optimizers_g.values():
                     optimizer.step()
                     optimizer.zero_grad()
 
@@ -128,8 +128,8 @@ def train(config, appearance_feature_extractor, canonical_keypoint_detector, hea
                     loss = sum(loss_values)
 
                     loss.backward()
-                    optimizers[-1].step()
-                    optimizers[-1].zero_grad()
+                    optimizer_multi_scale_discriminator.step()
+                    optimizer_multi_scale_discriminator.zero_grad()
                 else:
                     losses_discriminator = {}
 
@@ -142,17 +142,17 @@ def train(config, appearance_feature_extractor, canonical_keypoint_detector, hea
             for scheduler in schedulers:
                 scheduler.step()
 
-        logger.log_epoch(epoch=epoch,
-                         models={
-                             'appearance_feature_extractor': appearance_feature_extractor,
-                             'canonical_keypoint_detector': canonical_keypoint_detector,
-                             'head_expression_estimator': head_expression_estimator,
-                             'occlusion_aware_generator': occlusion_aware_generator,
-                             'multi_scale_discriminator': multi_scale_discriminator,
-                             'optimizer_appearance_feature_extractor': optimizer_appearance_feature_extractor,
-                             'optimizer_canonical_keypoint_detector': optimizer_canonical_keypoint_detector,
-                             'optimizer_head_expression_estimator': optimizer_head_expression_estimator,
-                             'optimizer_occlusion_aware_generator': optimizer_occlusion_aware_generator,
-                             'optimizer_multi_scale_discriminator': optimizer_multi_scale_discriminator},
-                         inp=x,
-                         out=generated)
+            logger.log_epoch(epoch=epoch,
+                            models={
+                                'appearance_feature_extractor': appearance_feature_extractor,
+                                'canonical_keypoint_detector': canonical_keypoint_detector,
+                                'head_expression_estimator': head_expression_estimator,
+                                'occlusion_aware_generator': occlusion_aware_generator,
+                                'multi_scale_discriminator': multi_scale_discriminator,
+                                'optimizer_appearance_feature_extractor': optimizer_appearance_feature_extractor,
+                                'optimizer_canonical_keypoint_detector': optimizer_canonical_keypoint_detector,
+                                'optimizer_head_expression_estimator': optimizer_head_expression_estimator,
+                                'optimizer_occlusion_aware_generator': optimizer_occlusion_aware_generator,
+                                'optimizer_multi_scale_discriminator': optimizer_multi_scale_discriminator},
+                            inp=x,
+                            out=generated)
