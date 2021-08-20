@@ -1,7 +1,5 @@
 __pycache__/
 .idea/
-data/vox_128
-data/vox/
-data/vox_mp4/
+data/
 pretrained/
 log/
