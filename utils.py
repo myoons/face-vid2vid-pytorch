@@ -1,6 +1,5 @@
 import os
 import multiprocessing
-from typing import Mapping
 
 import cv2
 from glob import glob
@@ -69,6 +68,7 @@ def mp_resize(n_processes):
     pool.map(resize, inputs)
     pool.close()
     pool.join()
+
 
 if __name__ == '__main__':
     mp_resize(12)
