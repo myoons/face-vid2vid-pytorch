@@ -24,9 +24,9 @@ class HeadExpressionEstimator(nn.Module):
 
         self.avg_pool = nn.AvgPool2d(7)
 
-        self.fc_yaw = nn.Linear(block_expansion * 8, num_bins)
-        self.fc_pitch = nn.Linear(block_expansion * 8, num_bins)
-        self.fc_roll = nn.Linear(block_expansion * 8, num_bins)
+        # self.fc_yaw = nn.Linear(block_expansion * 8, num_bins)
+        # self.fc_pitch = nn.Linear(block_expansion * 8, num_bins)
+        # self.fc_roll = nn.Linear(block_expansion * 8, num_bins)
 
         self.fc_translation = nn.Linear(block_expansion * 8, 3)
         self.fc_deformation = nn.Linear(block_expansion * 8, num_kp * 3)
@@ -50,12 +50,13 @@ class HeadExpressionEstimator(nn.Module):
 
         out = self.avg_pool(out)
         out = out.view(x.size(0), -1)
-
-        yaw, pitch, roll = self.fc_yaw(out), self.fc_pitch(out), self.fc_roll(out)
+        
+        # yaw, pitch, roll = self.fc_yaw(out), self.fc_pitch(out), self.fc_roll(out)
         translation = self.fc_translation(out)
         deformation = self.fc_deformation(out)
 
         translation = translation.unsqueeze(-2).repeat(1, self.num_kp, 1)
         deformation = deformation.view(-1, self.num_kp, 3)
 
-        return (yaw, pitch, roll), translation, deformation
+        # return (yaw, pitch, roll), translation, deformation
+        return translation, deformation

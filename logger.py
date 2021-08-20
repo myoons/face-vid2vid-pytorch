@@ -35,7 +35,6 @@ class Logger:
 
         loss_string = "; ".join([f"{name} - {value:.4f}" for name, value in zip(loss_names, loss_mean)])
         loss_string = str(self.epoch).zfill(self.zfill_num) + ") " + loss_string
-
         print(loss_string, file=self.log_file)
         self.loss_list = []
         self.log_file.flush()
@@ -221,3 +220,4 @@ class Visualizer:
         image = self.create_image_grid(*images)
         image = (255 * image).astype(np.uint8)
         return image
+        

@@ -31,7 +31,7 @@ def kp2gaussian(kp, spatial_size, kp_variance):
 
 def make_coordinate_grid(spatial_size, dtype):
     """
-    Create a meshgrid [-1,1] x [-1,1] of given spatial_size.
+    Create a meshgrid [-1,1] x [-1,1] x [-1,1] of given spatial_size.
     """
     d, h, w = spatial_size
     z = torch.arange(d).type(dtype)

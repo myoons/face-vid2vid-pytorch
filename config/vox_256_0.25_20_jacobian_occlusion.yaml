@@ -46,7 +46,7 @@ model_params:
 
 train_params:
   num_epochs: 100
-  num_repeats: 75
+  num_repeats: 1
   num_bins: 66
   keypoint_distance_threshold: 0.1
   keypoint_depth_target: 0.33

@@ -71,8 +71,16 @@ class GeneratorFullModel(nn.Module):
         return rotation_matrix, torch.stack([yaw, pitch, roll], dim=1)
 
     def get_keypoint(self, img_source, img_driving, canonical_keypoint):
-        (yaw_s, pitch_s, roll_s), translation_s, deformation_s = self.head_expression_estimator(img_source)
-        (yaw_d, pitch_d, roll_d), translation_d, deformation_d = self.head_expression_estimator(img_driving)
+
+        """ Just using pretrained hopenet for getting head pose angles """
+        # (yaw_s, pitch_s, roll_s), translation_s, deformation_s = self.head_expression_estimator(img_source)
+        # (yaw_d, pitch_d, roll_d), translation_d, deformation_d = self.head_expression_estimator(img_driving)
+        
+        translation_s, deformation_s = self.head_expression_estimator(img_source)
+        translation_d, deformation_d = self.head_expression_estimator(img_driving)
+
+        yaw_s, pitch_s, roll_s = self.hopenet(img_source)
+        yaw_d, pitch_d, roll_d = self.hopenet(img_driving)
 
         rotation_s, euler_angle_s = self.get_rotation_matrix(yaw_s, pitch_s, roll_s, self.idx_tensor)
         rotation_d, euler_angle_d = self.get_rotation_matrix(yaw_d, pitch_d, roll_d, self.idx_tensor)
@@ -153,7 +161,7 @@ class GeneratorFullModel(nn.Module):
         """ Keypoint prior loss """
         keypoint_prior = 0.
 
-        keypoints_repeat = torch.cat([kp_source['keypoints'], kp_driving['keypoints']], dim=0).unsqueeze(2).repeat(1, 1, self.num_kp, 1)
+        keypoints_repeat = torch.cat([kp_source['keypoints'][..., 1:], kp_driving['keypoints'][..., 1:]], dim=0).unsqueeze(2).repeat(1, 1, self.num_kp, 1)
         keypoints_diff = keypoints_repeat - keypoints_repeat.transpose(1, 2)
         keypoints_diff = F.relu(0.1 - torch.sum(keypoints_diff * keypoints_diff, dim=-1))
 
@@ -162,26 +170,26 @@ class GeneratorFullModel(nn.Module):
         keypoint_prior += torch.sum(keypoints_diff, dim=[1, 2]).mean()
 
         mean_depth = torch.mean(torch.cat([kp_source['keypoints'], kp_driving['keypoints']], dim=0)[..., 0], dim=-1)
-        keypoint_prior += torch.norm(mean_depth - self.train_params['keypoint_depth_target'], 2)
+        keypoint_prior += torch.abs(mean_depth - self.train_params['keypoint_depth_target']).mean()
         loss_values['keypoint_prior'] = self.loss_weights['keypoint_prior'] * keypoint_prior
 
         """ Head pose loss """
-        head_pose = 0.
-        yaw_target_source, pitch_target_source, roll_target_source = self.hopenet(x['source'])
-        yaw_target_driving, pitch_target_driving, roll_target_driving = self.hopenet(x['driving'])
+        # head_pose = 0.
+        # yaw_target_source, pitch_target_source, roll_target_source = self.hopenet(x['source'])
+        # yaw_target_driving, pitch_target_driving, roll_target_driving = self.hopenet(x['driving'])
 
-        _, target_euler_angle_source = self.get_rotation_matrix(yaw_target_source,
-                                                                pitch_target_source,
-                                                                roll_target_source,
-                                                                self.idx_tensor)
-        _, target_euler_angle_driving = self.get_rotation_matrix(yaw_target_driving,
-                                                                 pitch_target_driving,
-                                                                 roll_target_driving,
-                                                                 self.idx_tensor)
+        # _, target_euler_angle_source = self.get_rotation_matrix(yaw_target_source,
+        #                                                         pitch_target_source,
+        #                                                         roll_target_source,
+        #                                                         self.idx_tensor)
+        # _, target_euler_angle_driving = self.get_rotation_matrix(yaw_target_driving,
+        #                                                          pitch_target_driving,
+        #                                                          roll_target_driving,
+        #                                                          self.idx_tensor)
         
-        head_pose += torch.sum(torch.abs(kp_source['euler_angle'] - target_euler_angle_source), dim=-1).mean()
-        head_pose += torch.sum(torch.abs(kp_driving['euler_angle'] - target_euler_angle_driving), dim=-1).mean()
-        loss_values['head_pose'] = self.loss_weights['head_pose'] * head_pose
+        # head_pose += torch.sum(torch.abs(kp_source['euler_angle'] - target_euler_angle_source), dim=-1).mean()
+        # head_pose += torch.sum(torch.abs(kp_driving['euler_angle'] - target_euler_angle_driving), dim=-1).mean()
+        # loss_values['head_pose'] = self.loss_weights['head_pose'] * head_pose
 
         """ Deformation prior loss """
         deformation_prior = 0.
