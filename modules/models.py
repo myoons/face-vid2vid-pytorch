@@ -86,7 +86,7 @@ class GeneratorFullModel(nn.Module):
         kp_source['keypoints'] = rotated_keypoints_s + translation_s + deformation_s
         kp_driving['keypoints'] = rotated_keypoints_d + translation_d + deformation_d
 
-        if 'jacobian' in kp_driving:
+        if 'jacobian' in canonical_keypoint:
             kp_source['jacobian'] = torch.matmul(rotation_s, canonical_keypoint['jacobian'])
             kp_driving['jacobian'] = torch.matmul(rotation_d, canonical_keypoint['jacobian'])
 

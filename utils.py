@@ -1,5 +1,6 @@
 import os
 import multiprocessing
+from typing import Mapping
 
 import cv2
 from glob import glob
@@ -23,6 +24,7 @@ def video2png(video_path):
     assert vid_width == 224 and vid_height == 224, print(f"{target_dir} is not 224 * 224")
 
     vid_length = int(vidcap.get(cv2.CAP_PROP_FRAME_COUNT))
+
     if vid_length > 250:
         for frame_idx in range(0, vid_length, 250):  # 1 frame per 10 seconds
             vidcap.set(cv2.CAP_PROP_FRAME_COUNT, frame_idx)
@@ -62,12 +64,11 @@ def resize(image):
 
 def mp_resize(n_processes):
     pool = multiprocessing.Pool(processes=n_processes)
-    inputs = glob("data/vox/**/**/**.png")
+    inputs = glob("data/vox_128/**/**/**/**.jpg")
 
     pool.map(resize, inputs)
     pool.close()
     pool.join()
-
 
 if __name__ == '__main__':
     mp_resize(12)

@@ -90,8 +90,6 @@ class MotionFieldEstimator(nn.Module):
 
     def forward(self, source_feature, kp_source, kp_driving):
         source_feature = self.compressor(source_feature)
-        if self.scale_factor != 1:
-            source_feature = self.down(source_feature)
 
         batch_size, _, d, h, w = source_feature.shape
 

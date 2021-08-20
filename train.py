@@ -87,7 +87,7 @@ def train(config, appearance_feature_extractor, canonical_keypoint_detector, hea
 
     if 'num_repeats' in train_params or train_params['num_repeats'] != 1:
         dataset = DatasetRepeater(dataset, train_params['num_repeats'])
-    dataloader = DataLoader(dataset, batch_size=train_params['batch_size'], shuffle=True, num_workers=6, drop_last=True)
+    dataloader = DataLoader(dataset, batch_size=train_params['batch_size'], shuffle=True, num_workers=10, drop_last=True)
 
     generator_full = GeneratorFullModel(appearance_feature_extractor=appearance_feature_extractor,
                                         canonical_keypoint_detector=canonical_keypoint_detector,
