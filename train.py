@@ -87,7 +87,9 @@ def train(config, appearance_feature_extractor, canonical_keypoint_detector, hea
     sampler = DistributedSampler(dataset)
     dataloader = DataLoader(dataset, 
                             batch_size=train_params['batch_size'], 
-                            sampler=sampler)
+                            sampler=sampler,
+                            drop_last=True,
+                            num_workers=6)
 
     generator_full = GeneratorFullModel(appearance_feature_extractor=appearance_feature_extractor,
                                         canonical_keypoint_detector=canonical_keypoint_detector,
