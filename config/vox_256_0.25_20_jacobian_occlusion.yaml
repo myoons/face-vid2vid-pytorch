@@ -57,7 +57,7 @@ train_params:
   lr_occlusion_aware_generator: 2.0e-4
   lr_multi_scale_discriminator: 2.0e-4
   pretrained_hopenet_dir: pretrained/hopenet.pkl
-  batch_size: 32
+  batch_size: 7
   scales: [1, 0.5, 0.25, 0.125]
   checkpoint_freq: 20
   transform_params:

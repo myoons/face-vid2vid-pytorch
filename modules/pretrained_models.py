@@ -6,6 +6,9 @@ from torchvision import models
 import torch.nn.functional as F
 import numpy as np
 
+from sync_batchnorm.batchnorm import SynchronizedBatchNorm2d as BatchNorm2d
+
+
 
 class Hopenet(nn.Module):
     """
@@ -16,7 +19,7 @@ class Hopenet(nn.Module):
         super(Hopenet, self).__init__()
         self.inplanes = 64
         self.conv1 = nn.Conv2d(3, 64, kernel_size=7, stride=2, padding=3, bias=False)
-        self.bn1 = nn.BatchNorm2d(64)
+        self.bn1 = BatchNorm2d(64)
         self.relu = nn.ReLU(inplace=True)
         self.maxpool = nn.MaxPool2d(kernel_size=3, stride=2, padding=1)
 
@@ -44,7 +47,7 @@ class Hopenet(nn.Module):
             downsample = nn.Sequential(
                 nn.Conv2d(self.inplanes, planes * block.expansion,
                           kernel_size=1, stride=stride, bias=False),
-                nn.BatchNorm2d(planes * block.expansion),
+                BatchNorm2d(planes * block.expansion),
             )
 
         layers = [block(self.inplanes, planes, stride, downsample)]

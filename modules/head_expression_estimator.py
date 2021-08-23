@@ -2,6 +2,7 @@
 
 import torch.nn as nn
 from modules.blocks import ResBottleneck
+from sync_batchnorm.batchnorm import SynchronizedBatchNorm2d as BatchNorm2d
 
 
 class HeadExpressionEstimator(nn.Module):
@@ -12,7 +13,7 @@ class HeadExpressionEstimator(nn.Module):
         self.depth = depth
         self.first = nn.Sequential(
             nn.Conv2d(in_channels=num_channels, out_channels=64, kernel_size=(7, 7), stride=(2, 2), padding=(3, 3), bias=False),
-            nn.BatchNorm2d(64),
+            BatchNorm2d(64),
             nn.ReLU(),
             nn.MaxPool2d(kernel_size=3, stride=2, padding=1)
         )

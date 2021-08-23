@@ -13,6 +13,7 @@ from modules.occlusion_aware_generator import OcclusionAwareGenerator
 from modules.multi_scale_discriminator import MultiScaleDiscriminator
 
 import torch
+import torch.distributed as dist
 
 from train import train
 
@@ -31,6 +32,7 @@ def arg_parse():
     parser.add_argument("--mode", default="train", choices=["train"])
     parser.add_argument("--log_dir", default='log', help="path to log into")
     parser.add_argument("--checkpoint", default=None, help="path to checkpoint to restore")
+    parser.add_argument("--local_rank", type=int, default=-1, metavar='N', help='local process rank')
     parser.add_argument("--device_ids", default="0", type=lambda x: list(map(int, x.split(','))),
                         help="Names of the devices comma separated.")
     parser.add_argument("--verbose", dest="verbose", action="store_true", help="Print model architecture")
@@ -39,12 +41,15 @@ def arg_parse():
     return parser.parse_args()
 
 
-def init_model(model_name, configs):
+def init_model(model_name, configs, args):
+    if args.is_main_process:
+        print(f'Initializing {model_name}')
+        
     model = MODELS[model_name](**configs['model_params'][model_name],
                                **configs['model_params']['common_params'])
 
     if torch.cuda.is_available():
-        model = model.cuda()
+        model = model.cuda(args.local_rank)
 
     if args.verbose:
         print(model)
@@ -57,29 +62,41 @@ if __name__ == '__main__':
     args = arg_parse()
     with open(args.config) as f:
         config = yaml.load(f)
+    
+    args.is_main_process = args.local_rank == 0
 
-    if args.checkpoint is not None:
-        log_dir = os.path.join(*os.path.split(args.checkpoint)[:-1])
-    else:
-        log_dir = os.path.join(args.log_dir, os.path.basename(args.config).split('.')[0])
-        log_dir += ' ' + strftime("%d_%m_%y_%H.%M.%S", gmtime())
+    log_dir=''
+    if args.is_main_process:
+        print('Initializing checkpoints')
+        if args.checkpoint is not None:
+            log_dir = os.path.join(*os.path.split(args.checkpoint)[:-1])
+        else:
+            log_dir = os.path.join(args.log_dir, os.path.basename(args.config).split('.')[0])
+            log_dir += ' ' + strftime("%d_%m_%y_%H.%M.%S", gmtime())
+    
+    if args.is_main_process:
+        print('Initializing logs')
+        if not os.path.exists(log_dir):
+            os.makedirs(log_dir)
+        if not os.path.exists(os.path.join(log_dir, os.path.basename(args.config))):
+            copy(args.config, log_dir)
+
+    dist.init_process_group(backend='nccl', init_method='env://')
+    torch.cuda.set_device(args.local_rank)
 
     models = dict()
     for model_ in MODELS.keys():
-        models[model_] = init_model(model_, config)
+        models[model_] = init_model(model_, config, args)
 
     dataset = FramesDataset(is_train=(args.mode == 'train'), **config['dataset_params'])
 
-    if not os.path.exists(log_dir):
-        os.makedirs(log_dir)
-    if not os.path.exists(os.path.join(log_dir, os.path.basename(args.config))):
-        copy(args.config, log_dir)
-
     if args.mode == 'train':
-        print("Training...")
+        if args.is_main_process:
+            print("Training...")
+        
         train(config=config,
               checkpoint=args.checkpoint,
               log_dir=log_dir,
               dataset=dataset,
-              device_ids=args.device_ids,
+              args=args,
               **models)

@@ -1,6 +1,8 @@
 import torch
 from torch import nn
 import torch.nn.functional as F
+from sync_batchnorm.batchnorm import SynchronizedBatchNorm2d as BatchNorm2d
+from sync_batchnorm.batchnorm import SynchronizedBatchNorm3d as BatchNorm3d
 
 
 class ResBottleneck(nn.Module):
@@ -17,18 +19,18 @@ class ResBottleneck(nn.Module):
 
         self.layer1 = nn.Sequential(
             nn.Conv2d(in_channels=in_features, out_channels=self.mid_features, kernel_size=(1, 1)),
-            nn.BatchNorm2d(self.mid_features)
+            BatchNorm2d(self.mid_features)
         )
 
         self.layer2 = nn.Sequential(
             nn.Conv2d(in_channels=self.mid_features, out_channels=self.mid_features, kernel_size=(3, 3),
                       stride=(down, down), padding=(1, 1)),
-            nn.BatchNorm2d(self.mid_features),
+            BatchNorm2d(self.mid_features),
         )
 
         self.layer3 = nn.Sequential(
             nn.Conv2d(in_channels=self.mid_features, out_channels=out_features, kernel_size=(1, 1)),
-            nn.BatchNorm2d(out_features)
+            BatchNorm2d(out_features)
         )
 
         if down_sample:
@@ -62,8 +64,8 @@ class ResBlock2d(nn.Module):
                                padding=padding)
         self.conv2 = nn.Conv2d(in_channels=in_features, out_channels=in_features, kernel_size=kernel_size,
                                padding=padding)
-        self.norm1 = nn.BatchNorm2d(in_features, affine=True)
-        self.norm2 = nn.BatchNorm2d(in_features, affine=True)
+        self.norm1 = BatchNorm2d(in_features, affine=True)
+        self.norm2 = BatchNorm2d(in_features, affine=True)
 
     def forward(self, x):
         out = self.norm1(x)
@@ -83,7 +85,7 @@ class UpBlock2d(nn.Module):
 
         self.conv = nn.Conv2d(in_channels=in_features, out_channels=out_features, kernel_size=kernel_size,
                               padding=padding)
-        self.norm = nn.BatchNorm2d(out_features, affine=True)
+        self.norm = BatchNorm2d(out_features, affine=True)
 
     def forward(self, x):
         out = F.interpolate(x, scale_factor=2)
@@ -100,7 +102,7 @@ class DownBlock2d(nn.Module):
 
         self.conv = nn.Conv2d(in_channels=in_features, out_channels=out_features, kernel_size=kernel_size,
                               padding=padding)
-        self.norm = nn.BatchNorm2d(num_features=out_features, affine=True)
+        self.norm = BatchNorm2d(num_features=out_features, affine=True)
         self.pool = nn.AvgPool2d(kernel_size=(2, 2))
 
     def forward(self, x):
@@ -120,8 +122,8 @@ class ResBlock3d(nn.Module):
                                padding=padding)
         self.conv2 = nn.Conv3d(in_channels=in_features, out_channels=in_features, kernel_size=kernel_size,
                                padding=padding)
-        self.norm1 = nn.BatchNorm3d(in_features, affine=True)
-        self.norm2 = nn.BatchNorm3d(in_features, affine=True)
+        self.norm1 = BatchNorm3d(in_features, affine=True)
+        self.norm2 = BatchNorm3d(in_features, affine=True)
 
     def forward(self, x):
         out = self.norm1(x)
@@ -141,7 +143,7 @@ class UpBlock3d(nn.Module):
 
         self.conv = nn.Conv3d(in_channels=in_features, out_channels=out_features, kernel_size=kernel_size,
                               padding=padding)
-        self.norm = nn.BatchNorm3d(out_features, affine=True)
+        self.norm = BatchNorm3d(out_features, affine=True)
 
     def forward(self, x):
         _, _, d, h, w = x.shape
@@ -158,7 +160,7 @@ class DownBlock3d(nn.Module):
         super(DownBlock3d, self).__init__()
         self.conv = nn.Conv3d(in_channels=in_features, out_channels=out_features, kernel_size=kernel_size,
                               padding=padding)
-        self.norm = nn.BatchNorm3d(num_features=out_features, affine=True)
+        self.norm = BatchNorm3d(num_features=out_features, affine=True)
         self.pool = nn.AvgPool3d(kernel_size=(1, 2, 2))
 
     def forward(self, x):

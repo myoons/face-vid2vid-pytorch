@@ -4,18 +4,18 @@ warnings.simplefilter("ignore", UserWarning)
 
 import torch
 from torch.utils.data import DataLoader
-from torch.nn import DataParallel
+from torch.utils.data.distributed import DistributedSampler
+from torch.nn.parallel import DistributedDataParallel as DDP
 
 from tqdm import trange, tqdm
 from torch.optim.lr_scheduler import MultiStepLR
 from modules.models import GeneratorFullModel, DiscriminatorFullModel
 
 from logger import Logger
-from frames_dataset import DatasetRepeater
 
 
 def train(config, appearance_feature_extractor, canonical_keypoint_detector, head_expression_estimator,
-          occlusion_aware_generator, multi_scale_discriminator, checkpoint, log_dir, dataset, device_ids):
+          occlusion_aware_generator, multi_scale_discriminator, checkpoint, log_dir, dataset, args):
     train_params = config['train_params']
 
     optimizer_appearance_feature_extractor = torch.optim.Adam(appearance_feature_extractor.parameters(),
@@ -84,10 +84,10 @@ def train(config, appearance_feature_extractor, canonical_keypoint_detector, hea
                   scheduler_occlusion_aware_generator,
                   scheduler_multi_scale_discriminator]
 
-    if 'num_repeats' in train_params or train_params['num_repeats'] != 1:
-        dataset = DatasetRepeater(dataset, train_params['num_repeats'])
-    dataloader = DataLoader(dataset, batch_size=train_params['batch_size'], shuffle=True, num_workers=10,
-                            drop_last=True)
+    sampler = DistributedSampler(dataset)
+    dataloader = DataLoader(dataset, 
+                            batch_size=train_params['batch_size'], 
+                            sampler=sampler)
 
     generator_full = GeneratorFullModel(appearance_feature_extractor=appearance_feature_extractor,
                                         canonical_keypoint_detector=canonical_keypoint_detector,
@@ -96,67 +96,79 @@ def train(config, appearance_feature_extractor, canonical_keypoint_detector, hea
                                         multi_scale_discriminator=multi_scale_discriminator,
                                         train_params=train_params,
                                         train=True)
+    generator_full = generator_full.cuda(args.local_rank)
 
     discriminator_full = DiscriminatorFullModel(multi_scale_discriminator=multi_scale_discriminator,
                                                 generator_output_channels=occlusion_aware_generator.output_channels,
                                                 train_params=train_params)
+    discriminator_full = discriminator_full.cuda(args.local_rank)
 
     if torch.cuda.is_available():
-        print('uploading model to gpus')
-        generator_full = DataParallel(generator_full)
-        discriminator_full = DataParallel(discriminator_full)
+        print(f'uploading model to gpu {args.local_rank}')
+        generator_full = DDP(generator_full,
+                             device_ids=[args.local_rank],
+                             output_device=args.local_rank)
+
+        discriminator_full = DDP(discriminator_full,
+                                 device_ids=[args.local_rank],
+                                 output_device=args.local_rank)
 
     global_step = 0
-    with Logger(log_dir=log_dir, checkpoint_freq=train_params['checkpoint_freq'],
-                visualizer_params=config['visualizer_params']) as logger:
+    if args.is_main_process:
+        logger = Logger(log_dir=log_dir, checkpoint_freq=train_params['checkpoint_freq'], visualizer_params=config['visualizer_params'])
 
-        for epoch in trange(start_epoch, train_params['num_epochs']):
-            learning_rates = {key: value.param_groups[0]['lr'] for (key, value) in optimizers_g.items()}
-            learning_rates['multi_scale_discriminator'] = optimizer_multi_scale_discriminator.param_groups[0]['lr']
+    for epoch in trange(start_epoch, train_params['num_epochs']):
+        learning_rates = {key: value.param_groups[0]['lr'] for (key, value) in optimizers_g.items()}
+        learning_rates['multi_scale_discriminator'] = optimizer_multi_scale_discriminator.param_groups[0]['lr']
 
-            for x in tqdm(dataloader, total=len(dataloader)):
-                losses_generator, generated = generator_full(x)
+        for (source, driving) in tqdm(dataloader, total=len(dataloader)):
+            source, driving = source.cuda(args.local_rank), driving.cuda(args.local_rank)
+            x = {'source': source, 'driving': driving}
 
-                loss_values = [val.mean() for val in losses_generator.values()]
+            losses_generator, generated = generator_full(x)
+
+            loss_values = [val.mean() for val in losses_generator.values()]
+            loss = sum(loss_values)
+
+            loss.backward()
+
+            for optimizer in optimizers_g.values():
+                optimizer.step()
+                optimizer.zero_grad()
+
+            if train_params['loss_weights']['generator_gan'] != 0:
+                losses_discriminator = discriminator_full(x, generated)
+                loss_values = [val.mean() for val in losses_discriminator.values()]
                 loss = sum(loss_values)
 
                 loss.backward()
+                optimizer_multi_scale_discriminator.step()
+                optimizer_multi_scale_discriminator.zero_grad()
+            else:
+                losses_discriminator = {}
 
-                for optimizer in optimizers_g.values():
-                    optimizer.step()
-                    optimizer.zero_grad()
+            losses_generator.update(losses_discriminator)
+            losses = {key: value.mean().detach().data.cpu().numpy() for key, value in losses_generator.items()}
 
-                if train_params['loss_weights']['generator_gan'] != 0:
-                    losses_discriminator = discriminator_full(x, generated)
-                    loss_values = [val.mean() for val in losses_discriminator.values()]
-                    loss = sum(loss_values)
-
-                    loss.backward()
-                    optimizer_multi_scale_discriminator.step()
-                    optimizer_multi_scale_discriminator.zero_grad()
-                else:
-                    losses_discriminator = {}
-
-                losses_generator.update(losses_discriminator)
-                losses = {key: value.mean().detach().data.cpu().numpy() for key, value in losses_generator.items()}
-
-                global_step += 1
+            global_step += 1
+            if args.is_main_process:
                 logger.log_iter(losses=losses, learning_rates=learning_rates, step=global_step)
 
-            for scheduler in schedulers:
-                scheduler.step()
+        for scheduler in schedulers:
+            scheduler.step()
 
+        if args.is_main_process:
             logger.log_epoch(epoch=epoch,
-                             models={
-                                 'appearance_feature_extractor': appearance_feature_extractor,
-                                 'canonical_keypoint_detector': canonical_keypoint_detector,
-                                 'head_expression_estimator': head_expression_estimator,
-                                 'occlusion_aware_generator': occlusion_aware_generator,
-                                 'multi_scale_discriminator': multi_scale_discriminator,
-                                 'optimizer_appearance_feature_extractor': optimizer_appearance_feature_extractor,
-                                 'optimizer_canonical_keypoint_detector': optimizer_canonical_keypoint_detector,
-                                 'optimizer_head_expression_estimator': optimizer_head_expression_estimator,
-                                 'optimizer_occlusion_aware_generator': optimizer_occlusion_aware_generator,
-                                 'optimizer_multi_scale_discriminator': optimizer_multi_scale_discriminator},
-                             inp=x,
-                             out=generated)
+                                models={
+                                    'appearance_feature_extractor': appearance_feature_extractor,
+                                    'canonical_keypoint_detector': canonical_keypoint_detector,
+                                    'head_expression_estimator': head_expression_estimator,
+                                    'occlusion_aware_generator': occlusion_aware_generator,
+                                    'multi_scale_discriminator': multi_scale_discriminator,
+                                    'optimizer_appearance_feature_extractor': optimizer_appearance_feature_extractor,
+                                    'optimizer_canonical_keypoint_detector': optimizer_canonical_keypoint_detector,
+                                    'optimizer_head_expression_estimator': optimizer_head_expression_estimator,
+                                    'optimizer_occlusion_aware_generator': optimizer_occlusion_aware_generator,
+                                    'optimizer_multi_scale_discriminator': optimizer_multi_scale_discriminator},
+                                inp=x,
+                                out=generated)

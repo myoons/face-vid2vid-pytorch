@@ -43,15 +43,10 @@ class FramesDataset(Dataset):
         frame_idx = np.sort(np.random.choice(num_frames, replace=True, size=2))
         video_array = [img_as_float32(io.imread(os.path.join(path, frames[idx]))) for idx in frame_idx]
 
-        out = {}
         source = np.array(video_array[0], dtype='float32')
         driving = np.array(video_array[1], dtype='float32')
 
-        out['driving'] = driving.transpose((2, 0, 1))
-        out['source'] = source.transpose((2, 0, 1))
-
-        out['name'] = path
-        return out
+        return source.transpose((2, 0, 1)), driving.transpose((2, 0, 1))
 
 
 class DatasetRepeater(Dataset):
