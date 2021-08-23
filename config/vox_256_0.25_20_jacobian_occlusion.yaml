@@ -45,7 +45,7 @@ model_params:
     num_blocks: 5
 
 train_params:
-  num_epochs: 100
+  num_epochs: 500
   num_repeats: 1
   num_bins: 66
   keypoint_distance_threshold: 0.1
@@ -59,11 +59,11 @@ train_params:
   pretrained_hopenet_dir: pretrained/hopenet.pkl
   batch_size: 32
   scales: [1, 0.5, 0.25, 0.125]
-  checkpoint_freq: 1
+  checkpoint_freq: 20
   transform_params:
     sigma_affine: 0.05
-    sigma_tps: 0.005
-    points_tps: 5
+    # sigma_tps: 0.005
+    # points_tps: 5
   loss_weights:
     perceptual: 10
     generator_gan: 1
@@ -78,6 +78,6 @@ train_params:
 
 
 visualizer_params:
-  kp_size: 2
+  kp_size: 3
   draw_border: True
   colormap: 'gist_rainbow'

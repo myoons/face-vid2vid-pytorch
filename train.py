@@ -6,7 +6,6 @@ import torch
 from torch.utils.data import DataLoader
 from torch.nn import DataParallel
 
-from varname import nameof
 from tqdm import trange, tqdm
 from torch.optim.lr_scheduler import MultiStepLR
 from modules.models import GeneratorFullModel, DiscriminatorFullModel
@@ -87,15 +86,17 @@ def train(config, appearance_feature_extractor, canonical_keypoint_detector, hea
 
     if 'num_repeats' in train_params or train_params['num_repeats'] != 1:
         dataset = DatasetRepeater(dataset, train_params['num_repeats'])
-    dataloader = DataLoader(dataset, batch_size=train_params['batch_size'], shuffle=True, num_workers=10, drop_last=True)
+    dataloader = DataLoader(dataset, batch_size=train_params['batch_size'], shuffle=True, num_workers=10,
+                            drop_last=True)
 
     generator_full = GeneratorFullModel(appearance_feature_extractor=appearance_feature_extractor,
                                         canonical_keypoint_detector=canonical_keypoint_detector,
                                         head_expression_estimator=head_expression_estimator,
                                         occlusion_aware_generator=occlusion_aware_generator,
                                         multi_scale_discriminator=multi_scale_discriminator,
-                                        train_params=train_params)
-                                        
+                                        train_params=train_params,
+                                        train=True)
+
     discriminator_full = DiscriminatorFullModel(multi_scale_discriminator=multi_scale_discriminator,
                                                 generator_output_channels=occlusion_aware_generator.output_channels,
                                                 train_params=train_params)
@@ -106,7 +107,8 @@ def train(config, appearance_feature_extractor, canonical_keypoint_detector, hea
         discriminator_full = DataParallel(discriminator_full)
 
     global_step = 0
-    with Logger(log_dir=log_dir, checkpoint_freq=train_params['checkpoint_freq'], visualizer_params=config['visualizer_params']) as logger:
+    with Logger(log_dir=log_dir, checkpoint_freq=train_params['checkpoint_freq'],
+                visualizer_params=config['visualizer_params']) as logger:
 
         for epoch in trange(start_epoch, train_params['num_epochs']):
             learning_rates = {key: value.param_groups[0]['lr'] for (key, value) in optimizers_g.items()}
@@ -145,16 +147,16 @@ def train(config, appearance_feature_extractor, canonical_keypoint_detector, hea
                 scheduler.step()
 
             logger.log_epoch(epoch=epoch,
-                            models={
-                                'appearance_feature_extractor': appearance_feature_extractor,
-                                'canonical_keypoint_detector': canonical_keypoint_detector,
-                                'head_expression_estimator': head_expression_estimator,
-                                'occlusion_aware_generator': occlusion_aware_generator,
-                                'multi_scale_discriminator': multi_scale_discriminator,
-                                'optimizer_appearance_feature_extractor': optimizer_appearance_feature_extractor,
-                                'optimizer_canonical_keypoint_detector': optimizer_canonical_keypoint_detector,
-                                'optimizer_head_expression_estimator': optimizer_head_expression_estimator,
-                                'optimizer_occlusion_aware_generator': optimizer_occlusion_aware_generator,
-                                'optimizer_multi_scale_discriminator': optimizer_multi_scale_discriminator},
-                            inp=x,
-                            out=generated)
+                             models={
+                                 'appearance_feature_extractor': appearance_feature_extractor,
+                                 'canonical_keypoint_detector': canonical_keypoint_detector,
+                                 'head_expression_estimator': head_expression_estimator,
+                                 'occlusion_aware_generator': occlusion_aware_generator,
+                                 'multi_scale_discriminator': multi_scale_discriminator,
+                                 'optimizer_appearance_feature_extractor': optimizer_appearance_feature_extractor,
+                                 'optimizer_canonical_keypoint_detector': optimizer_canonical_keypoint_detector,
+                                 'optimizer_head_expression_estimator': optimizer_head_expression_estimator,
+                                 'optimizer_occlusion_aware_generator': optimizer_occlusion_aware_generator,
+                                 'optimizer_multi_scale_discriminator': optimizer_multi_scale_discriminator},
+                             inp=x,
+                             out=generated)

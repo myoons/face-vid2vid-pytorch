@@ -13,7 +13,7 @@ class GeneratorFullModel(nn.Module):
     """
 
     def __init__(self, appearance_feature_extractor, canonical_keypoint_detector, head_expression_estimator,
-                 occlusion_aware_generator, multi_scale_discriminator, train_params):
+                 occlusion_aware_generator, multi_scale_discriminator, train_params, train=False):
         super(GeneratorFullModel, self).__init__()
 
         self.appearance_feature_extractor = appearance_feature_extractor
@@ -22,6 +22,7 @@ class GeneratorFullModel(nn.Module):
         self.occlusion_aware_generator = occlusion_aware_generator
         self.multi_scale_discriminator = multi_scale_discriminator
 
+        self.train = train
         self.train_params = train_params
         self.scales = train_params['scales']
         self.disc_scales = self.multi_scale_discriminator.scales
@@ -46,7 +47,6 @@ class GeneratorFullModel(nn.Module):
             self.hopenet = self.hopenet.cuda()
             self.vgg = self.vgg.cuda()
             self.face_vgg = self.face_vgg.cuda()
-
 
     def get_rotation_matrix(self, yaw, pitch, roll, idx_tensor):
         idx_tensor = idx_tensor.to(yaw.device)
@@ -147,10 +147,10 @@ class GeneratorFullModel(nn.Module):
             loss_values['equivariance_keypoints'] = self.loss_weights['equivariance_keypoints'] * equivariance_keypoints
 
         if 'jacobian' in transformed_kp and 'equivariance_jacobian' in self.loss_weights:
-            jacobian_transformed = torch.matmul(transform.jacobian(transformed_kp['keypoints'][:, :, 1:]),
-                                                transformed_kp['jacobian'][:, :, 1:, 1:])
+            jacobian_transformed = torch.matmul(transform.jacobian(transformed_kp['keypoints'][..., 1:]),
+                                                transformed_kp['jacobian'][..., 1:, 1:])
 
-            normed_driving = torch.inverse(kp_driving['jacobian'][:, :, 1:, 1:])
+            normed_driving = torch.inverse(kp_driving['jacobian'][..., 1:, 1:])
             normed_transformed = jacobian_transformed
             equivariance_jacobian = torch.matmul(normed_driving, normed_transformed)
 
@@ -161,7 +161,7 @@ class GeneratorFullModel(nn.Module):
         """ Keypoint prior loss """
         keypoint_prior = 0.
 
-        keypoints_repeat = torch.cat([kp_source['keypoints'][..., 1:], kp_driving['keypoints'][..., 1:]], dim=0).unsqueeze(2).repeat(1, 1, self.num_kp, 1)
+        keypoints_repeat = torch.cat([kp_source['keypoints'], kp_driving['keypoints']], dim=0).unsqueeze(2).repeat(1, 1, self.num_kp, 1)
         keypoints_diff = keypoints_repeat - keypoints_repeat.transpose(1, 2)
         keypoints_diff = F.relu(0.1 - torch.sum(keypoints_diff * keypoints_diff, dim=-1))
 
@@ -210,7 +210,9 @@ class GeneratorFullModel(nn.Module):
         pyramid_real = self.pyramid(x['driving'])
         pyramid_generated = self.pyramid(generated['prediction'])
 
-        loss_values = self.calculate_loss_values(x, pyramid_real, pyramid_generated, generated, kp_source, kp_driving)
+        loss_values = None
+        if self.train:
+            loss_values = self.calculate_loss_values(x, pyramid_real, pyramid_generated, generated, kp_source, kp_driving)
         return loss_values, generated
 
 

@@ -1,5 +1,4 @@
 import os
-import sys
 import yaml
 from argparse import ArgumentParser
 from time import gmtime, strftime
