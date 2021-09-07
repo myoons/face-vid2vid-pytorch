@@ -9,7 +9,6 @@ import numpy as np
 from sync_batchnorm.batchnorm import SynchronizedBatchNorm2d as BatchNorm2d
 
 
-
 class Hopenet(nn.Module):
     """
     Hope network for head pose loss

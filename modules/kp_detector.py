@@ -32,7 +32,7 @@ class CanonicalKeypointDetector(nn.Module):
                                       kernel_size=(3, 3, 3),  # (7, 7, 7) is replaced to (3, 3, 3)
                                       padding=(1, 1, 1))
             self.jacobian.weight.data.zero_()
-            self.jacobian.bias.data.copy_(torch.Tensor([1, 0, 0, 0, 1, 0, 0, 0, 1] * num_kp).float())
+            self.jacobian.bias.data.copy_(torch.tensor([1, 0, 0, 0, 1, 0, 0, 0, 1] * num_kp, dtype=torch.float))
         else:
             self.jacobian = None
 
@@ -49,7 +49,7 @@ class CanonicalKeypointDetector(nn.Module):
         """
         shape = heatmap.shape
         heatmap = heatmap.unsqueeze(-1)
-        grid = make_coordinate_grid(shape[2:], dtype=heatmap.type()).unsqueeze(0).unsqueeze(0).to(heatmap.device)
+        grid = make_coordinate_grid(shape[2:], dtype=heatmap.type()).unsqueeze_(0).unsqueeze_(0).to(heatmap.device)
         keypoints = (heatmap * grid).sum(dim=(2, 3, 4))
         kp = {'keypoints': keypoints}
 

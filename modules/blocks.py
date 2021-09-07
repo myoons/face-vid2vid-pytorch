@@ -7,7 +7,7 @@ from sync_batchnorm.batchnorm import SynchronizedBatchNorm3d as BatchNorm3d
 
 class ResBottleneck(nn.Module):
 
-    def __init__(self, in_features, out_features, down_sample=False):
+    def __init__(self, in_features, down_sample=False):
         super(ResBottleneck, self).__init__()
 
         if down_sample:
@@ -15,29 +15,27 @@ class ResBottleneck(nn.Module):
         else:
             down = 1
 
-        self.mid_features = out_features // 4
-
         self.layer1 = nn.Sequential(
-            nn.Conv2d(in_channels=in_features, out_channels=self.mid_features, kernel_size=(1, 1)),
-            BatchNorm2d(self.mid_features)
+            nn.Conv2d(in_channels=in_features, out_channels=in_features // 4, kernel_size=(1, 1)),
+            BatchNorm2d(in_features // 4, affine=True)
         )
 
         self.layer2 = nn.Sequential(
-            nn.Conv2d(in_channels=self.mid_features, out_channels=self.mid_features, kernel_size=(3, 3),
+            nn.Conv2d(in_channels=in_features // 4, out_channels=in_features // 4, kernel_size=(3, 3),
                       stride=(down, down), padding=(1, 1)),
-            BatchNorm2d(self.mid_features),
+            BatchNorm2d(in_features // 4, affine=True),
         )
 
         self.layer3 = nn.Sequential(
-            nn.Conv2d(in_channels=self.mid_features, out_channels=out_features, kernel_size=(1, 1)),
-            BatchNorm2d(out_features)
+            nn.Conv2d(in_channels=in_features // 4, out_channels=in_features, kernel_size=(1, 1)),
+            BatchNorm2d(in_features, affine=True)
         )
 
         if down_sample:
-            self.residual = nn.Conv2d(in_channels=in_features, out_channels=out_features, kernel_size=(1, 1),
-                                      stride=(down, down), bias=False)
-        else:
-            self.residual = nn.Conv2d(in_channels=in_features, out_channels=out_features, kernel_size=(1, 1))
+            self.residual = nn.Sequential(
+                nn.Conv2d(in_channels=in_features, out_channels=in_features, kernel_size=(1, 1),
+                          stride=(down, down)),
+                BatchNorm2d(in_features, affine=True))
 
         self.down_sample = down_sample
 
@@ -48,12 +46,12 @@ class ResBottleneck(nn.Module):
         out = F.relu(self.layer2(out))
         out = self.layer3(out)
 
-        if residual.size() is not out.size():
+        if self.down_sample:
             residual = self.residual(x)
 
         out += residual
-        return F.relu(out)
-
+        out = F.relu(out)
+        return out
 
 class ResBlock2d(nn.Module):
 
@@ -159,9 +157,8 @@ class DownBlock3d(nn.Module):
     def __init__(self, in_features, out_features, kernel_size=(3, 3, 3), padding=(1, 1, 1)):
         super(DownBlock3d, self).__init__()
         self.conv = nn.Conv3d(in_channels=in_features, out_channels=out_features, kernel_size=kernel_size,
-                              padding=padding)
+                              padding=padding, stride=(1, 2, 2))
         self.norm = BatchNorm3d(num_features=out_features, affine=True)
-        self.pool = nn.AvgPool3d(kernel_size=(1, 2, 2))
 
     def forward(self, x):
         out = self.conv(x)
@@ -227,7 +224,7 @@ class MotionFieldEncoder(nn.Module):
                 DownBlock3d(in_features=in_features if i == 0 else min(max_features, block_expansion * (2 ** (i - 1))),
                             out_features=min(max_features, block_expansion * (2 ** i)),
                             kernel_size=(3, 3, 3),
-                            padding=(1, 1, 1))
+                            padding=(1, 1, 1), )
             )
 
         self.down_blocks = nn.ModuleList(down_blocks)

@@ -2,7 +2,7 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 from modules.blocks import ResBlock2d, UpBlock2d
-from modules.motion_field_estimator import MotionFieldEstimator
+from modules.dense_motion import DenseMotionNetwork
 
 
 class OcclusionAwareGenerator(nn.Module):
@@ -11,15 +11,19 @@ class OcclusionAwareGenerator(nn.Module):
     """
 
     def __init__(self, depth, num_kp, num_channels, output_channels, block_expansion, source_channels,
-                 num_res_blocks, num_up_blocks, estimate_occlusion_map, motion_field_estimator):
+                 num_res_blocks, num_up_blocks, estimate_occlusion_map=False, dense_motion=None):
         super(OcclusionAwareGenerator, self).__init__()
 
         self.num_channels = num_channels
-        self.motion_field_estimator = MotionFieldEstimator(num_kp=num_kp,
+
+        if dense_motion:
+            self.dense_motion_network = DenseMotionNetwork(num_kp=num_kp,
                                                            depth=depth,
                                                            source_channels=source_channels,
                                                            estimate_occlusion_map=estimate_occlusion_map,
-                                                           **motion_field_estimator)
+                                                           **dense_motion)
+        else:
+            self.dense_motion_network = None
 
         self.first = nn.Sequential(
             nn.Conv2d(depth * source_channels, block_expansion * 4, kernel_size=(3, 3), padding=(1, 1)),
@@ -44,7 +48,7 @@ class OcclusionAwareGenerator(nn.Module):
         self.output_channels = output_channels
 
     @staticmethod
-    def deform_source_feature(source_feature, deformation):
+    def deform_feature(source_feature, deformation):
         _, d_deform, h_deform, w_deform, _ = deformation.shape
         _, _, d_feature, h_feature, w_feature = source_feature.shape
 
@@ -58,25 +62,22 @@ class OcclusionAwareGenerator(nn.Module):
     def forward(self, source_feature, kp_source, kp_driving):
 
         output_dict = {}
-        motion_field_output = self.motion_field_estimator(source_feature=source_feature,
-                                                          kp_source=kp_source,
-                                                          kp_driving=kp_driving)
+        dense_motion_output = self.dense_motion_network(source_feature, kp_source, kp_driving)
+        output_dict['mask'] = dense_motion_output['mask']
 
-        output_dict['mask'] = motion_field_output['mask']
-        output_dict['sparse_deformed'] = motion_field_output['sparse_deformed']
-
-        if 'occlusion_map' in motion_field_output:
-            occlusion_map = motion_field_output['occlusion_map']
+        if 'occlusion_map' in dense_motion_output:
+            occlusion_map = dense_motion_output['occlusion_map']
             output_dict['occlusion_map'] = occlusion_map
         else:
             occlusion_map = None
 
-        deformation = motion_field_output['deformation']
-        bs, _, _, h, w = source_feature.shape
+        deformation = dense_motion_output['deformation']
         deformed_source_feature = self.deform_source_feature(source_feature, deformation)
-        output_dict['deformed'] = deformed_source_feature
 
-        out = self.first(deformed_source_feature.view(bs, -1, h, w))
+        bs, c, d, h, w = deformed_source_feature.shape
+        deformed_source_feature = deformed_source_feature.view(bs, c * d, h, w)
+        out = self.first(deformed_source_feature)
+
         if occlusion_map is not None:
             if out.shape[2:] != occlusion_map.shape[2:]:
                 occlusion_map = F.interpolate(occlusion_map, size=out.shape[2:], mode='bilinear')

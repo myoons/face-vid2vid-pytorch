@@ -4,11 +4,11 @@ import numpy as np
 from argparse import ArgumentParser
 from skimage import io, img_as_float32
 
-from modules.appearance_feature_extractor import AppearanceFeatureExtractor
-from modules.canonical_keypoint_detector import CanonicalKeypointDetector
-from modules.head_expression_estimator import HeadExpressionEstimator
-from modules.occlusion_aware_generator import OcclusionAwareGenerator
-from modules.multi_scale_discriminator import MultiScaleDiscriminator
+from modules.af_extractor import AppearanceFeatureExtractor
+from modules.kp_detector import CanonicalKeypointDetector
+from modules.he_estimator import HeadExpressionEstimator
+from modules.generator import OcclusionAwareGenerator
+from modules.discriminator import MultiScaleDiscriminator
 
 from modules.models import GeneratorFullModel
 import torch

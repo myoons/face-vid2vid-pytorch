@@ -42,11 +42,12 @@ def make_coordinate_grid(spatial_size, dtype):
     x = (2 * (x / (w - 1)) - 1)
     y = (2 * (y / (h - 1)) - 1)
 
-    zz = z.view(-1, 1, 1).repeat(1, w, h)
-    xx = x.view(1, -1, 1).repeat(d, 1, h)
-    yy = y.view(1, 1, -1).repeat(d, w, 1)
+    xx = x.view(1, 1, -1).repeat(d, 1, w)
+    yy = y.view(1, -1, 1).repeat(d, h, 1)
+    zz = z.view(-1, 1, 1).repeat(1, h, w)
 
-    meshed = torch.cat([zz.unsqueeze_(3), xx.unsqueeze_(3), yy.unsqueeze_(3)], dim=3)
+    meshed = torch.cat([xx.unsqueeze_(3), yy.unsqueeze_(3), zz.unsqueeze_(3)], 3)
+
     return meshed
 
 

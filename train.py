@@ -14,114 +14,53 @@ from modules.models import GeneratorFullModel, DiscriminatorFullModel
 from logger import Logger
 
 
-def train(config, appearance_feature_extractor, canonical_keypoint_detector, head_expression_estimator,
-          occlusion_aware_generator, multi_scale_discriminator, checkpoint, log_dir, dataset, args):
+def train(config, af_extractor, kp_detector, he_estimator, generator, discriminator, log_dir, dataset, args):
     train_params = config['train_params']
 
-    optimizer_appearance_feature_extractor = torch.optim.Adam(appearance_feature_extractor.parameters(),
-                                                              lr=train_params['lr_appearance_feature_extractor'],
-                                                              betas=[0.5, 0.999])
-    optimizer_canonical_keypoint_detector = torch.optim.Adam(canonical_keypoint_detector.parameters(),
-                                                             lr=train_params['lr_canonical_keypoint_detector'],
-                                                             betas=[0.5, 0.999])
-    optimizer_head_expression_estimator = torch.optim.Adam(head_expression_estimator.parameters(),
-                                                           lr=train_params['lr_head_expression_estimator'],
-                                                           betas=[0.5, 0.999])
-    optimizer_occlusion_aware_generator = torch.optim.Adam(occlusion_aware_generator.parameters(),
-                                                           lr=train_params['lr_occlusion_aware_generator'],
-                                                           betas=[0.5, 0.999])
-    optimizer_multi_scale_discriminator = torch.optim.Adam(multi_scale_discriminator.parameters(),
-                                                           lr=train_params['lr_multi_scale_discriminator'],
-                                                           betas=[0.5, 0.999])
+    optimizer_af_extractor = torch.optim.Adam(af_extractor.parameters(), lr=train_params['lr_af_extractor'],
+                                              betas=(0.5, 0.999))
+    optimizer_kp_detector = torch.optim.Adam(kp_detector.parameters(), lr=train_params['lr_kp_detector'],
+                                             betas=(0.5, 0.999))
+    optimizer_he_estimator = torch.optim.Adam(he_estimator.parameters(), lr=train_params['lr_he_estimator'],
+                                              betas=(0.5, 0.999))
+    optimizer_generator = torch.optim.Adam(generator.parameters(), lr=train_params['lr_generator'], betas=(0.5, 0.999))
+    optimizer_discriminator = torch.optim.Adam(discriminator.parameters(), lr=train_params['lr_discriminator'],
+                                               betas=(0.5, 0.999))
 
-    optimizers_g = {'appearance_feature_extractor': optimizer_appearance_feature_extractor,
-                    'canonical_keypoint_detector': optimizer_canonical_keypoint_detector,
-                    'head_expression_estimator': optimizer_head_expression_estimator,
-                    'occlusioin_aware_generator': optimizer_occlusion_aware_generator}
-
-    if checkpoint is not None:
-        start_epoch = Logger.load_cpk(appearance_feature_extractor,
-                                      canonical_keypoint_detector,
-                                      head_expression_estimator,
-                                      occlusion_aware_generator,
-                                      multi_scale_discriminator,
-                                      optimizer_appearance_feature_extractor,
-                                      optimizer_canonical_keypoint_detector,
-                                      optimizer_head_expression_estimator,
-                                      optimizer_occlusion_aware_generator,
-                                      optimizer_multi_scale_discriminator)
+    if args.checkpoint is not None:
+        start_epoch = Logger.load_cpk(af_extractor, kp_detector, generator, generator, discriminator,
+                                      optimizer_af_extractor, optimizer_kp_detector, optimizer_he_estimator,
+                                      optimizer_generator, optimizer_discriminator)
     else:
         start_epoch = 0
 
-    scheduler_appearance_feature_extractor = MultiStepLR(optimizer_appearance_feature_extractor,
-                                                         train_params['epoch_milestones'],
-                                                         gamma=0.1,
-                                                         last_epoch=start_epoch - 1)
+    epoch_milestones = train_params['epoch_milestones']
+    scheduler_af_extractor = MultiStepLR(optimizer_af_extractor, epoch_milestones, gamma=0.1, last_epoch=start_epoch - 1)
+    scheduler_kp_detector = MultiStepLR(optimizer_kp_detector, epoch_milestones, gamma=0.1, last_epoch=start_epoch - 1)
+    scheduler_he_estimator = MultiStepLR(optimizer_he_estimator, epoch_milestones, gamma=0.1, last_epoch=start_epoch - 1)
+    scheduler_generator = MultiStepLR(optimizer_generator, epoch_milestones, gamma=0.1, last_epoch=start_epoch - 1)
+    scheduler_discriminator = MultiStepLR(optimizer_discriminator, epoch_milestones, gamma=0.1, last_epoch=start_epoch - 1)
 
-    scheduler_canonical_keypoint_detector = MultiStepLR(optimizer_canonical_keypoint_detector,
-                                                        train_params['epoch_milestones'],
-                                                        gamma=0.1,
-                                                        last_epoch=start_epoch - 1)
-
-    scheduler_head_expression_estimator = MultiStepLR(optimizer_head_expression_estimator,
-                                                      train_params['epoch_milestones'],
-                                                      gamma=0.1,
-                                                      last_epoch=start_epoch - 1)
-
-    scheduler_occlusion_aware_generator = MultiStepLR(optimizer_occlusion_aware_generator,
-                                                      train_params['epoch_milestones'],
-                                                      gamma=0.1,
-                                                      last_epoch=start_epoch - 1)
-
-    scheduler_multi_scale_discriminator = MultiStepLR(optimizer_multi_scale_discriminator,
-                                                      train_params['epoch_milestones'],
-                                                      gamma=0.1,
-                                                      last_epoch=start_epoch - 1)
-
-    schedulers = [scheduler_appearance_feature_extractor,
-                  scheduler_canonical_keypoint_detector,
-                  scheduler_head_expression_estimator,
-                  scheduler_occlusion_aware_generator,
-                  scheduler_multi_scale_discriminator]
+    # TODO : DatasetRepeater
+    # TODO : How to shuffle dataset in DistributedDataParallel ?
 
     sampler = DistributedSampler(dataset)
-    dataloader = DataLoader(dataset, 
-                            batch_size=train_params['batch_size'], 
-                            sampler=sampler,
-                            drop_last=True,
-                            num_workers=6)
+    dataloader = DataLoader(dataset, batch_size=train_params['batch_size'], sampler=sampler, drop_last=True, num_workers=6)
 
-    generator_full = GeneratorFullModel(appearance_feature_extractor=appearance_feature_extractor,
-                                        canonical_keypoint_detector=canonical_keypoint_detector,
-                                        head_expression_estimator=head_expression_estimator,
-                                        occlusion_aware_generator=occlusion_aware_generator,
-                                        multi_scale_discriminator=multi_scale_discriminator,
-                                        train_params=train_params,
-                                        train=True)
-    generator_full = generator_full.cuda(args.local_rank)
-
-    discriminator_full = DiscriminatorFullModel(multi_scale_discriminator=multi_scale_discriminator,
-                                                generator_output_channels=occlusion_aware_generator.output_channels,
-                                                train_params=train_params)
-    discriminator_full = discriminator_full.cuda(args.local_rank)
+    generator_full = GeneratorFullModel(af_extractor, kp_detector, he_estimator, generator, discriminator, train_params, args, train=True)
+    discriminator_full = DiscriminatorFullModel(discriminator, generator.output_channels, train_params)
 
     if torch.cuda.is_available():
-        print(f'uploading model to gpu {args.local_rank}')
-        generator_full = DDP(generator_full,
-                             device_ids=[args.local_rank],
-                             output_device=args.local_rank)
-
-        discriminator_full = DDP(discriminator_full,
-                                 device_ids=[args.local_rank],
-                                 output_device=args.local_rank)
+        generator_full.cuda(args.local_rank)
+        discriminator_full = discriminator_full.cuda(args.local_rank)
+        generator_full = DDP(generator_full, device_ids=[args.local_rank], output_device=args.local_rank)
+        discriminator_full = DDP(discriminator_full, device_ids=[args.local_rank], output_device=args.local_rank)
 
     global_step = 0
     if args.is_main_process:
-        logger = Logger(log_dir=log_dir, checkpoint_freq=train_params['checkpoint_freq'], visualizer_params=config['visualizer_params'])
+        logger = Logger(log_dir, train_params['checkpoint_freq'], config['visualizer_params'])
 
     for epoch in trange(start_epoch, train_params['num_epochs']):
-        learning_rates = {key: value.param_groups[0]['lr'] for (key, value) in optimizers_g.items()}
-        learning_rates['multi_scale_discriminator'] = optimizer_multi_scale_discriminator.param_groups[0]['lr']
 
         for (source, driving) in tqdm(dataloader, total=len(dataloader)):
             source, driving = source.cuda(args.local_rank), driving.cuda(args.local_rank)
@@ -133,44 +72,52 @@ def train(config, appearance_feature_extractor, canonical_keypoint_detector, hea
             loss = sum(loss_values)
 
             loss.backward()
-
-            for optimizer in optimizers_g.values():
-                optimizer.step()
-                optimizer.zero_grad()
+            optimizer_af_extractor.step()
+            optimizer_af_extractor.zero_grad()
+            optimizer_kp_detector.step()
+            optimizer_kp_detector.zero_grad()
+            optimizer_he_estimator.step()
+            optimizer_he_estimator.zero_grad()
+            optimizer_generator.step()
+            optimizer_generator.zero_grad()
 
             if train_params['loss_weights']['generator_gan'] != 0:
+                optimizer_discriminator.zero_grad()
                 losses_discriminator = discriminator_full(x, generated)
                 loss_values = [val.mean() for val in losses_discriminator.values()]
                 loss = sum(loss_values)
 
                 loss.backward()
-                optimizer_multi_scale_discriminator.step()
-                optimizer_multi_scale_discriminator.zero_grad()
+                optimizer_discriminator.step()
+                optimizer_discriminator.zero_grad()
             else:
                 losses_discriminator = {}
 
             losses_generator.update(losses_discriminator)
             losses = {key: value.mean().detach().data.cpu().numpy() for key, value in losses_generator.items()}
 
-            global_step += 1
             if args.is_main_process:
-                logger.log_iter(losses=losses, learning_rates=learning_rates, step=global_step)
+                logger.log_iter(losses, global_step)
+            global_step += 1
 
-        for scheduler in schedulers:
-            scheduler.step()
+        scheduler_af_extractor.step()
+        scheduler_kp_detector.step()
+        scheduler_he_estimator.step()
+        scheduler_generator.step()
+        scheduler_discriminator.step()
 
         if args.is_main_process:
             logger.log_epoch(epoch=epoch,
-                                models={
-                                    'appearance_feature_extractor': appearance_feature_extractor,
-                                    'canonical_keypoint_detector': canonical_keypoint_detector,
-                                    'head_expression_estimator': head_expression_estimator,
-                                    'occlusion_aware_generator': occlusion_aware_generator,
-                                    'multi_scale_discriminator': multi_scale_discriminator,
-                                    'optimizer_appearance_feature_extractor': optimizer_appearance_feature_extractor,
-                                    'optimizer_canonical_keypoint_detector': optimizer_canonical_keypoint_detector,
-                                    'optimizer_head_expression_estimator': optimizer_head_expression_estimator,
-                                    'optimizer_occlusion_aware_generator': optimizer_occlusion_aware_generator,
-                                    'optimizer_multi_scale_discriminator': optimizer_multi_scale_discriminator},
-                                inp=x,
-                                out=generated)
+                             models={
+                                 'af_extractor': af_extractor,
+                                 'kp_detector': kp_detector,
+                                 'he_estimator': he_estimator,
+                                 'generator': generator,
+                                 'discriminator': discriminator,
+                                 'optimizer_af_extractor': optimizer_af_extractor,
+                                 'optimizer_kp_detector': optimizer_kp_detector,
+                                 'optimizer_he_estimator': optimizer_he_estimator,
+                                 'optimizer_generator': optimizer_generator,
+                                 'optimizer_discriminator': optimizer_discriminator},
+                             inp=x,
+                             out=generated)

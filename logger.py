@@ -114,13 +114,13 @@ class Logger:
         self.log_file.close()
         self.tensorboard_writer.close()
 
-    def log_iter(self, losses, learning_rates, step):
+    def log_iter(self, losses, step):
         losses = collections.OrderedDict(losses.items())
         if self.names is None:
             self.names = list(losses.keys())
         self.loss_list.append(list(losses.values()))
 
-        self.log_tensorboard(losses, learning_rates, step)
+        self.log_tensorboard(losses, step)
 
     def log_epoch(self, epoch, models, inp, out):
         self.epoch = epoch
@@ -131,15 +131,11 @@ class Logger:
         self.log_scores(self.names)
         self.visualize_rec(inp, out)
 
-    def log_tensorboard(self, losses, learning_rates, step):
+    def log_tensorboard(self, losses, step):
         for key, value in losses.items():
             self.tensorboard_writer.add_scalar(f'loss/{key}', value, step)
 
-        for key, value in learning_rates.items():
-            self.tensorboard_writer.add_scalar(f'lr/{key}', value, step)
-
         self.tensorboard_writer.add_scalars('all_losses', losses, step)
-        self.tensorboard_writer.add_scalars('all_lrs', learning_rates, step)
 
 
 class Visualizer:
@@ -186,18 +182,18 @@ class Visualizer:
         # Source image with keypoints
         source = source.data.cpu()
         source = np.transpose(source, [0, 2, 3, 1])
-        kp_source = out['kp_source']['keypoints'].data[..., 1:].cpu().numpy()
+        kp_source = out['kp_source']['keypoints'].data[..., :2].cpu().numpy()
         images.append((source, kp_source))
 
         # Equivariance visualization
         if 'transformed_frame' in out:
             transformed = out['transformed_frame'].data.cpu().numpy()
             transformed = np.transpose(transformed, [0, 2, 3, 1])
-            transformed_kp = out['transformed_kp']['keypoints'].data[..., 1:].cpu().numpy()
+            transformed_kp = out['transformed_kp']['keypoints'].data[..., :2].cpu().numpy()
             images.append((transformed, transformed_kp))
 
         # Driving image with keypoints
-        kp_driving = out['kp_driving']['keypoints'].data[..., 1:].cpu().numpy()
+        kp_driving = out['kp_driving']['keypoints'].data[..., :2].cpu().numpy()
         driving = driving.data.cpu().numpy()
         driving = np.transpose(driving, [0, 2, 3, 1])
         images.append((driving, kp_driving))
