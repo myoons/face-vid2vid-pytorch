@@ -1,9 +1,12 @@
 import cv2
 import face_alignment
+import numpy as np
+from math import cos, sin
 
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
+from PIL import Image
 
 from modules.pretrained_models import Vgg19, Hopenet, FaceVgg
 from modules.util import Transform, ImagePyramid
@@ -25,6 +28,7 @@ class GeneratorFullModel(nn.Module):
         self.generator = generator
         self.discriminator = discriminator
 
+        self.args = args
         self.train = train
         self.train_params = train_params
         self.scales = train_params['scales']
@@ -35,7 +39,6 @@ class GeneratorFullModel(nn.Module):
             self.pyramid = self.pyramid.cuda(args.local_rank)
 
         self.loss_weights = train_params['loss_weights']
-
         self.idx_tensor = torch.arange(66, dtype=torch.float32)
         self.num_kp = af_extractor.num_kp
 
@@ -48,6 +51,7 @@ class GeneratorFullModel(nn.Module):
 
         if torch.cuda.is_available():
             self.hopenet = self.hopenet.cuda(args.local_rank)
+            self.hopenet.eval()
 
         self.fa = face_alignment.FaceAlignment(face_alignment.LandmarksType._2D, flip_input=False,
                                                device=f'cuda:{args.local_rank}')
@@ -61,11 +65,13 @@ class GeneratorFullModel(nn.Module):
             if torch.cuda.is_available():
                 self.vgg = self.vgg.cuda(args.local_rank)
                 self.face_vgg = self.face_vgg.cuda(args.local_rank)
+                self.vgg.eval()
+                self.face_vgg.eval()
 
     @staticmethod
     def pred_to_degree(pred, idx_tensor):
         idx_tensor = idx_tensor.to(pred.device)
-        degree = torch.sum(torch.softmax(pred, dim=1) * idx_tensor, 1) * 3 - 99
+        degree = torch.sum(torch.softmax(pred, dim=-1) * idx_tensor, 1) * 3 - 99
         degree = degree / 180 * 3.14
         return degree
 
@@ -170,6 +176,8 @@ class GeneratorFullModel(nn.Module):
         transform = Transform(x['driving'].shape[0], **self.train_params['transform_params'])
         transformed_frame = transform.transform_frame(x['driving'])
         transformed_he_driving = self.he_estimator(transformed_frame)
+
+        self.get_head_pose(transformed_frame, transformed_he_driving, self.args.local_rank)
         transformed_kp = self.get_keypoint(transformed_he_driving, kp_canonical)
 
         generated['transformed_frame'] = transformed_frame
@@ -245,44 +253,40 @@ class GeneratorFullModel(nn.Module):
 
         return loss_values
 
-    def get_head_pose(self, images):
+    def get_head_pose(self, images, he, device):
 
-        images *= 255
         b, c, h, w = images.shape
-        preds = self.fa.face_detector.detect_from_batch(images)
+        preds = self.fa.face_detector.detect_from_batch(images * 255)
 
-        cropped_images = []
+        aligned_images = []
         for idx, pred in enumerate(preds):
-            lt_x, lt_y, rb_x, rb_y, _ = pred
-
+            lt_x, lt_y, rb_x, rb_y, _ = pred[0]
             bw = rb_x - lt_x
             bh = rb_y - lt_y
 
             x_min = int(max(lt_x - 2 * bw / 4, 0))
-            x_max = int(min(rb_x + 2 * bw / 4, w))
+            x_max = int(min(rb_x + 2 * bw / 4, w-1))
             y_min = int(max(lt_y - 3 * bh / 4, 0))
-            y_max = int(min(rb_y + bh / 4, h))
+            y_max = int(min(rb_y + bh / 4, h-1))
 
-            image = images[idx, :, int(y_min):int(y_max), int(x_min):int(x_max)]
+            img = images[idx, int(y_min):int(y_max), int(x_min):int(x_max)]
+            img = self.transform_hopenet(img)
+            aligned_images.append(img)
 
-            image = self.transform_hopenet(image)
-            cropped_images.append(image)
-
-
-        yaw, pitch, roll = model(img)
-        return None
+        aligned_tensor = torch.stack(aligned_images)
+        yaw, pitch, roll = self.hopenet(aligned_tensor)
+        
+        he['yaw'] = yaw
+        he['pitch'] = pitch
+        he['roll'] = roll
 
     def forward(self, x):
-        print(x['source'])
-        input()
-        # kp_canonical = self.kp_detector(x['source'])
-        # he_source = self.he_estimator(x['source'])
-        # he_driving = self.he_estimator(x['driving'])
+        kp_canonical = self.kp_detector(x['source'])
+        he_source = self.he_estimator(x['source'])
+        he_driving = self.he_estimator(x['driving'])
 
-        source_raw = cv2.cvtColor((x['source'] * 255).permute(1, 2, 0).cpu().numpy(), cv2.COLOR_RGB2BGR)
-        driving_raw = cv2.cvtColor((x['driving'] * 255).permute(1, 2, 0).cpu().numpy(), cv2.COLOR_RGB2BGR)
-
-        input()
+        self.get_head_pose(x['source'], he_source, self.args.local_rank)
+        self.get_head_pose(x['driving'], he_driving, self.args.local_rank)
 
         kp_driving = self.get_keypoint(he_source, kp_canonical)
         kp_source = self.get_keypoint(he_driving, kp_canonical)

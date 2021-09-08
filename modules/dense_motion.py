@@ -25,8 +25,7 @@ class DenseMotionNetwork(nn.Module):
                                    in_features=(num_kp + 1) * (compress_channels + 1),
                                    depth=depth,
                                    num_blocks=num_blocks,
-                                   max_features=max_features,
-                                   is_keypoint=False)
+                                   max_features=max_features)
 
         self.mask = nn.Conv3d(in_channels=(self.hourglass.decoder.out_filters + (num_kp + 1) * (compress_channels + 1)),
                               out_channels=num_kp + 1,

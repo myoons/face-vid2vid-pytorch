@@ -33,37 +33,8 @@ class FramesDataset(Dataset):
 
         self.is_train = is_train
 
-        self.face_detector = dlib.cnn_face_detection_model_v1('pretrained/face_detector.dat')
-
     def __len__(self):
         return len(self.videos)
-
-    def align_face(self, image):
-
-        dets = self.face_detector(image, 1)
-
-        for idx, det in enumerate(dets):
-            x_min = det.rect.left()
-            y_min = det.rect.top()
-            x_max = det.rect.right()
-            y_max = det.rect.bottom()
-
-            bbox_width = abs(x_max - x_min)
-            bbox_height = abs(y_max - y_min)
-
-            x_min -= 2 * bbox_width / 4
-            x_max += 2 * bbox_width / 4
-            y_min -= 3 * bbox_height / 4
-            y_max += bbox_height / 4
-
-            x_min = max(x_min, 0)
-            y_min = max(y_min, 0)
-            x_max = min(image.shape[1], x_max)
-            y_max = min(image.shape[0], y_max)
-
-            img = image[y_min:y_max, x_min:x_max]
-
-        return img
 
     def __getitem__(self, idx):
         path = self.videos[idx]

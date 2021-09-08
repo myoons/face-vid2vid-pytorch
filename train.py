@@ -4,6 +4,7 @@ warnings.simplefilter("ignore", UserWarning)
 
 import torch
 from torch.utils.data import DataLoader
+from sync_batchnorm import DataParallelWithCallback
 from torch.utils.data.distributed import DistributedSampler
 from torch.nn.parallel import DistributedDataParallel as DDP
 
@@ -45,12 +46,13 @@ def train(config, af_extractor, kp_detector, he_estimator, generator, discrimina
     # TODO : How to shuffle dataset in DistributedDataParallel ?
 
     sampler = DistributedSampler(dataset)
-    dataloader = DataLoader(dataset, batch_size=train_params['batch_size'], sampler=sampler, drop_last=True, num_workers=6)
+    dataloader = DataLoader(dataset, batch_size=train_params['batch_size'], drop_last=True, num_workers=6)
 
     generator_full = GeneratorFullModel(af_extractor, kp_detector, he_estimator, generator, discriminator, train_params, args, train=True)
     discriminator_full = DiscriminatorFullModel(discriminator, generator.output_channels, train_params, args)
 
     if torch.cuda.is_available():
+
         generator_full.cuda(args.local_rank)
         discriminator_full = discriminator_full.cuda(args.local_rank)
         generator_full = DDP(generator_full, device_ids=[args.local_rank], output_device=args.local_rank)

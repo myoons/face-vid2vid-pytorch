@@ -2,7 +2,7 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 from modules.util import make_coordinate_grid
-from modules.blocks import Hourglass, AntiAliasInterpolation2d
+from modules.blocks import KPHourglass, AntiAliasInterpolation2d
 
 
 class CanonicalKeypointDetector(nn.Module):
@@ -11,15 +11,14 @@ class CanonicalKeypointDetector(nn.Module):
     """
 
     def __init__(self, depth, num_kp, num_channels, block_expansion, max_features, num_blocks,
-                 temperature, scale_factor, estimate_jacobian=False, is_keypoint=True):
+                 temperature, scale_factor, estimate_jacobian=False):
         super(CanonicalKeypointDetector, self).__init__()
 
-        self.first = Hourglass(block_expansion=block_expansion,
-                               in_features=num_channels,
-                               depth=depth,
-                               num_blocks=num_blocks,
-                               max_features=max_features,
-                               is_keypoint=is_keypoint)
+        self.first = KPHourglass(block_expansion=block_expansion,
+                                 in_features=num_channels,
+                                 depth=depth,
+                                 num_blocks=num_blocks,
+                                 max_features=max_features)
 
         self.kp = nn.Conv3d(in_channels=self.first.out_filters,
                             out_channels=num_kp,

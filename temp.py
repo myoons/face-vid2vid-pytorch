@@ -79,15 +79,10 @@ if __name__ == '__main__':
 
         cv2_frame = cv2.cvtColor(image, cv2.COLOR_BGR2RGB)
         img = cv2_frame[int(y_min):int(y_max), int(x_min):int(x_max)]
-        print(img)
-        input()
         img = Image.fromarray(img)
 
-        print(img)
-        input()
         img = transform_hopenet(img)
-        print(img)
-        input()
+
         img_shape = img.size()
         img = img.view(1, img_shape[0], img_shape[1], img_shape[2])
 
@@ -103,6 +98,7 @@ if __name__ == '__main__':
         roll_predicted = torch.sum(roll_predicted.data[0] * idx_tensor) * 3 - 99
 
         canvas = cv2.imread(p_img)
+        print(canvas)
         draw = draw_axis(canvas, yaw_predicted, pitch_predicted, roll_predicted,
                          tdx=(x_min + x_max) / 2,
                          tdy=(y_min + y_max) / 2,

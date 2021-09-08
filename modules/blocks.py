@@ -168,46 +168,42 @@ class DownBlock3d(nn.Module):
         return out
 
 
-class CanonicalKeypointEncoder(nn.Module):
+class KPHourglass(nn.Module):
     """
-    Hourglass Canonical Keypoint Detector Encoder, consists of DownBlock2d & 1x1 2d to 3d mapping
+    Keypoint Hourglass architecture.
     """
 
-    def __init__(self, block_expansion, in_features, num_blocks, depth, max_features):
-        super(CanonicalKeypointEncoder, self).__init__()
+    def __init__(self, block_expansion, in_features, depth, num_blocks, max_features):
+        super(KPHourglass, self).__init__()
 
-        down_blocks = []
+        self.down_blocks = nn.Sequential()
         for i in range(num_blocks):
-            down_blocks.append(
-                DownBlock2d(in_features=in_features if i == 0 else min(max_features, block_expansion * (2 ** (i - 1))),
-                            out_features=min(max_features, block_expansion * (2 ** i)),
-                            kernel_size=(3, 3),
-                            padding=(1, 1)),
-            )
-        self.down_blocks = nn.ModuleList(down_blocks)
+            self.down_blocks.add_module('down' + str(i),
+                                        DownBlock2d(in_features=in_features if i == 0 else min(max_features, block_expansion * (2 ** i)),
+                                                    out_features=min(max_features, block_expansion * (2 ** (i + 1))),
+                                                    kernel_size=(3, 3),
+                                                    padding=(1, 1)))
 
-        convs = []
-        for i in range(num_blocks)[::-1]:
-            convs.append(nn.Conv2d(
-                in_channels=min(max_features, block_expansion * (2 ** i)),
-                out_channels=depth * min(max_features, block_expansion * (2 ** i)),
-                kernel_size=(1, 1))
-            )
-        self.convs = nn.ModuleList(convs)
+        in_filters = min(max_features, block_expansion * (2 ** num_blocks))
+        self.conv = nn.Conv2d(in_channels=in_filters, out_channels=depth * in_filters, kernel_size=(1, 1))
+
+        self.up_blocks = nn.Sequential()
+        for i in range(num_blocks):
+            in_filters = min(max_features, block_expansion * (2 ** (num_blocks - i)))
+            out_filters = min(max_features, block_expansion * (2 ** (num_blocks - i - 1)))
+            self.up_blocks.add_module('up' + str(i), UpBlock3d(in_filters, out_filters, kernel_size=3, padding=1))
+
         self.depth = depth
+        self.out_filters = out_filters
 
     def forward(self, x):
-        temp = [x]
-        for down_block in self.down_blocks:
-            temp.append(down_block(temp[-1]))
+        out = self.down_blocks(x)
+        out = self.conv(out)
+        bs, c, h, w = out.shape
+        out = out.view(bs, c // self.depth, self.depth, h, w)
+        out = self.up_blocks(out)
 
-        outs = []
-        for conv in self.convs:
-            target = temp.pop()
-            b, c, h, w = target.shape
-            outs.append(conv(target).view(b, c, self.depth, h, w))
-
-        return outs[::-1]
+        return out
 
 
 class DenseMotionEncoder(nn.Module):
@@ -272,14 +268,10 @@ class Hourglass(nn.Module):
     Hourglass (U-Net) architecture for CanonicalKeypointDetector
     """
 
-    def __init__(self, block_expansion, in_features, depth, num_blocks, max_features, is_keypoint=False):
+    def __init__(self, block_expansion, in_features, depth, num_blocks, max_features):
         super(Hourglass, self).__init__()
 
-        if is_keypoint:
-            self.encoder = CanonicalKeypointEncoder(block_expansion, in_features, num_blocks, depth, max_features)
-        else:
-            self.encoder = DenseMotionEncoder(block_expansion, in_features, num_blocks, max_features)
-
+        self.encoder = DenseMotionEncoder(block_expansion, in_features, num_blocks, max_features)
         self.decoder = Decoder(block_expansion, num_blocks, depth, max_features)
         self.out_filters = self.decoder.out_filters
 

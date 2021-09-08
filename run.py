@@ -28,7 +28,7 @@ MODELS = {
 
 def arg_parse():
     parser = ArgumentParser()
-    parser.add_argument("--config", default="config/vox.yaml", help="path to config")
+    parser.add_argument("--config", default="config/vox-256.yaml", help="path to config")
     parser.add_argument("--mode", default="train", choices=["train"])
     parser.add_argument("--log_dir", default='log', help="path to log into")
     parser.add_argument("--checkpoint", default=None, help="path to checkpoint to restore")
@@ -109,6 +109,6 @@ if __name__ == '__main__':
         print(discriminator)
 
     dataset = FramesDataset(is_train=(args.mode == 'train'), **config['dataset_params'])
-
+    
     if args.mode == 'train':
         train(config, af_extractor, kp_detector, he_estimator, generator, discriminator, log_dir, dataset, args)
