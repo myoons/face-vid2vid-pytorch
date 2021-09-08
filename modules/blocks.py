@@ -53,6 +53,7 @@ class ResBottleneck(nn.Module):
         out = F.relu(out)
         return out
 
+
 class ResBlock2d(nn.Module):
 
     def __init__(self, in_features, kernel_size=(3, 3), padding=(1, 1)):
@@ -164,7 +165,6 @@ class DownBlock3d(nn.Module):
         out = self.conv(x)
         out = self.norm(out)
         out = F.relu(out)
-        out = self.pool(out)
         return out
 
 
@@ -210,13 +210,13 @@ class CanonicalKeypointEncoder(nn.Module):
         return outs[::-1]
 
 
-class MotionFieldEncoder(nn.Module):
+class DenseMotionEncoder(nn.Module):
     """
     Hourglass 3D Encoder
     """
 
     def __init__(self, block_expansion, in_features, num_blocks, max_features):
-        super(MotionFieldEncoder, self).__init__()
+        super(DenseMotionEncoder, self).__init__()
 
         down_blocks = []
         for i in range(num_blocks):
@@ -278,7 +278,7 @@ class Hourglass(nn.Module):
         if is_keypoint:
             self.encoder = CanonicalKeypointEncoder(block_expansion, in_features, num_blocks, depth, max_features)
         else:
-            self.encoder = MotionFieldEncoder(block_expansion, in_features, num_blocks, max_features)
+            self.encoder = DenseMotionEncoder(block_expansion, in_features, num_blocks, max_features)
 
         self.decoder = Decoder(block_expansion, num_blocks, depth, max_features)
         self.out_filters = self.decoder.out_filters

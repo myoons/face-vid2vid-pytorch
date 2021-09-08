@@ -72,11 +72,11 @@ class OcclusionAwareGenerator(nn.Module):
             occlusion_map = None
 
         deformation = dense_motion_output['deformation']
-        deformed_source_feature = self.deform_source_feature(source_feature, deformation)
+        deformed_feature = self.deform_feature(source_feature, deformation)
 
-        bs, c, d, h, w = deformed_source_feature.shape
-        deformed_source_feature = deformed_source_feature.view(bs, c * d, h, w)
-        out = self.first(deformed_source_feature)
+        bs, c, d, h, w = deformed_feature.shape
+        deformed_feature = deformed_feature.view(bs, c * d, h, w)
+        out = self.first(deformed_feature)
 
         if occlusion_map is not None:
             if out.shape[2:] != occlusion_map.shape[2:]:

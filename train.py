@@ -48,7 +48,7 @@ def train(config, af_extractor, kp_detector, he_estimator, generator, discrimina
     dataloader = DataLoader(dataset, batch_size=train_params['batch_size'], sampler=sampler, drop_last=True, num_workers=6)
 
     generator_full = GeneratorFullModel(af_extractor, kp_detector, he_estimator, generator, discriminator, train_params, args, train=True)
-    discriminator_full = DiscriminatorFullModel(discriminator, generator.output_channels, train_params)
+    discriminator_full = DiscriminatorFullModel(discriminator, generator.output_channels, train_params, args)
 
     if torch.cuda.is_available():
         generator_full.cuda(args.local_rank)

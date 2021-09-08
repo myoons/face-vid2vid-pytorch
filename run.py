@@ -65,8 +65,8 @@ if __name__ == '__main__':
             copy(args.config, log_dir)
 
     # For Distributed Data Parallel training
-    # dist.init_process_group(backend='nccl', init_method='env://')
-    # torch.cuda.set_device(args.local_rank)
+    dist.init_process_group(backend='nccl', init_method='env://')
+    torch.cuda.set_device(args.local_rank)
 
     af_extractor = AppearanceFeatureExtractor(**config['model_params']['af_extractor'],
                                               **config['model_params']['common_params'])

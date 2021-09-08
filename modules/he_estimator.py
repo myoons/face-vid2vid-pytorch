@@ -32,8 +32,8 @@ class HeadExpressionEstimator(nn.Module):
             self.block3.add_module(f'block3_{i + 1}', ResBottleneck(in_features=block_expansion * 8, down_sample=False))
 
         self.conv4 = nn.Conv2d(in_channels=block_expansion * 8, out_channels=block_expansion * 16, kernel_size=1)
-        self.norm4 = BatchNorm2d(block_expansion * 8, affine=True)
-        self.block4 = ResBottleneck(in_features=block_expansion * 8, down_sample=True)
+        self.norm4 = BatchNorm2d(block_expansion * 16, affine=True)
+        self.block4 = ResBottleneck(in_features=block_expansion * 16, down_sample=True)
 
         self.block5 = nn.Sequential()
         for i in range(5):
@@ -47,9 +47,10 @@ class HeadExpressionEstimator(nn.Module):
         for i in range(2):
             self.block7.add_module(f'block7_{i + 1}', ResBottleneck(in_features=block_expansion * 32, down_sample=False))
 
-        self.fc_yaw = nn.Linear(block_expansion * 32, 66)
-        self.fc_pitch = nn.Linear(block_expansion * 32, 66)
-        self.fc_roll = nn.Linear(block_expansion * 32, 66)
+        # Just using pre-trained hopenet
+        # self.fc_yaw = nn.Linear(block_expansion * 32, 66)
+        # self.fc_pitch = nn.Linear(block_expansion * 32, 66)
+        # self.fc_roll = nn.Linear(block_expansion * 32, 66)
 
         self.fc_translation = nn.Linear(block_expansion * 32, 3)
         self.fc_deformation = nn.Linear(block_expansion * 32, num_kp * 3)
@@ -90,12 +91,14 @@ class HeadExpressionEstimator(nn.Module):
 
         out = F.adaptive_avg_pool2d(out, 1)
         out = out.view(out.shape[0], -1)
-        
-        yaw, pitch, roll = self.fc_yaw(out), self.fc_pitch(out), self.fc_roll(out)
+
+        # Just using pre-trained hopenet
+        # yaw, pitch, roll = self.fc_yaw(out), self.fc_pitch(out), self.fc_roll(out)
         translation = self.fc_translation(out)
         deformation = self.fc_deformation(out)
 
         translation = translation.unsqueeze(-2).repeat(1, self.num_kp, 1)
         deformation = deformation.view(-1, self.num_kp, 3)
 
-        return {'yaw': yaw, 'pitch': pitch, 'roll': roll, 'translation': translation, 'deformation': deformation}
+        # return {'yaw': yaw, 'pitch': pitch, 'roll': roll, 'translation': translation, 'deformation': deformation}
+        return {'translation': translation, 'deformation': deformation}
