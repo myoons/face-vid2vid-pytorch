@@ -260,18 +260,23 @@ class GeneratorFullModel(nn.Module):
 
         aligned_images = []
         for idx, pred in enumerate(preds):
-            lt_x, lt_y, rb_x, rb_y, _ = pred[0]
-            bw = rb_x - lt_x
-            bh = rb_y - lt_y
+            if len(pred) > 0:
+                lt_x, lt_y, rb_x, rb_y, _ = pred[0]
+                bw = rb_x - lt_x
+                bh = rb_y - lt_y
 
-            x_min = int(max(lt_x - 2 * bw / 4, 0))
-            x_max = int(min(rb_x + 2 * bw / 4, w-1))
-            y_min = int(max(lt_y - 3 * bh / 4, 0))
-            y_max = int(min(rb_y + bh / 4, h-1))
+                x_min = int(max(lt_x - 2 * bw / 4, 0))
+                x_max = int(min(rb_x + 2 * bw / 4, w-1))
+                y_min = int(max(lt_y - 3 * bh / 4, 0))
+                y_max = int(min(rb_y + bh / 4, h-1))
 
-            img = images[idx, int(y_min):int(y_max), int(x_min):int(x_max)]
-            img = self.transform_hopenet(img)
-            aligned_images.append(img)
+                img = images[idx, int(y_min):int(y_max), int(x_min):int(x_max)]
+                img = self.transform_hopenet(img)
+                aligned_images.append(img)
+            else:
+                img = images[idx]
+                img = self.transform_hopenet(img)
+                aligned_images.append(img)
 
         aligned_tensor = torch.stack(aligned_images)
         yaw, pitch, roll = self.hopenet(aligned_tensor)
@@ -288,8 +293,8 @@ class GeneratorFullModel(nn.Module):
         self.get_head_pose(x['source'], he_source, self.args.local_rank)
         self.get_head_pose(x['driving'], he_driving, self.args.local_rank)
 
-        kp_driving = self.get_keypoint(he_source, kp_canonical)
-        kp_source = self.get_keypoint(he_driving, kp_canonical)
+        kp_source = self.get_keypoint(he_source, kp_canonical)
+        kp_driving = self.get_keypoint(he_driving, kp_canonical)
 
         appearance_feature = self.af_extractor(x['source'])
         generated = self.generator(appearance_feature, kp_source, kp_driving)

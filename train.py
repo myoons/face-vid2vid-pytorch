@@ -45,18 +45,22 @@ def train(config, af_extractor, kp_detector, he_estimator, generator, discrimina
     # TODO : DatasetRepeater
     # TODO : How to shuffle dataset in DistributedDataParallel ?
 
-    sampler = DistributedSampler(dataset)
-    dataloader = DataLoader(dataset, batch_size=train_params['batch_size'], drop_last=True, num_workers=6)
+    # sampler = DistributedSampler(dataset)
+    # dataloader = DataLoader(dataset, sampler=sampler, batch_size=train_params['batch_size'], drop_last=True, num_workers=6)
+
+    dataloader = DataLoader(dataset, batch_size=train_params['batch_size'], shuffle=True, drop_last=True, num_workers=6)
 
     generator_full = GeneratorFullModel(af_extractor, kp_detector, he_estimator, generator, discriminator, train_params, args, train=True)
     discriminator_full = DiscriminatorFullModel(discriminator, generator.output_channels, train_params, args)
 
     if torch.cuda.is_available():
-
         generator_full.cuda(args.local_rank)
         discriminator_full = discriminator_full.cuda(args.local_rank)
-        generator_full = DDP(generator_full, device_ids=[args.local_rank], output_device=args.local_rank)
-        discriminator_full = DDP(discriminator_full, device_ids=[args.local_rank], output_device=args.local_rank)
+
+        generator_full = torch.nn.DataParallel(generator_full)
+        discriminator_full = torch.nn.DataParallel(discriminator_full)
+        # generator_full = DDP(generator_full, device_ids=[args.local_rank], output_device=args.local_rank)
+        # discriminator_full = DDP(discriminator_full, device_ids=[args.local_rank], output_device=args.local_rank)
 
     global_step = 0
     if args.is_main_process:

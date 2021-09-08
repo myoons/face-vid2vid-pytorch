@@ -49,6 +49,10 @@ if __name__ == '__main__':
     with open(args.config) as f:
         config = yaml.load(f)
 
+    # For Distributed Data Parallel training
+    # dist.init_process_group(backend='nccl', init_method='env://')
+    # torch.cuda.set_device(args.local_rank)
+
     args.is_main_process = args.local_rank == 0
 
     if args.is_main_process:
@@ -63,10 +67,6 @@ if __name__ == '__main__':
             os.makedirs(log_dir)
         if not os.path.exists(os.path.join(log_dir, os.path.basename(args.config))):
             copy(args.config, log_dir)
-
-    # For Distributed Data Parallel training
-    dist.init_process_group(backend='nccl', init_method='env://')
-    torch.cuda.set_device(args.local_rank)
 
     af_extractor = AppearanceFeatureExtractor(**config['model_params']['af_extractor'],
                                               **config['model_params']['common_params'])

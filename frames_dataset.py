@@ -2,7 +2,6 @@ import os
 from glob import glob
 from skimage import io, img_as_float32
 
-import dlib
 import numpy as np
 from torch.utils.data import Dataset
 
