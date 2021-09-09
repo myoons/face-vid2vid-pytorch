@@ -12,6 +12,8 @@ from tqdm import trange, tqdm
 from torch.optim.lr_scheduler import MultiStepLR
 from modules.models import GeneratorFullModel, DiscriminatorFullModel
 
+from frames_dataset import DatasetRepeater
+
 from logger import Logger
 
 
@@ -48,15 +50,14 @@ def train(config, af_extractor, kp_detector, he_estimator, generator, discrimina
     # sampler = DistributedSampler(dataset)
     # dataloader = DataLoader(dataset, sampler=sampler, batch_size=train_params['batch_size'], drop_last=True, num_workers=6)
 
-    dataloader = DataLoader(dataset, batch_size=train_params['batch_size'], shuffle=True, drop_last=True, num_workers=6)
+    # if 'num_repeats' in train_params or train_params['num_repeats'] != 1:
+    #     dataset = DatasetRepeater(dataset, train_params['num_repeats'])
+    dataloader = DataLoader(dataset, batch_size=train_params['batch_size'], shuffle=True, drop_last=True, num_workers=10)
 
     generator_full = GeneratorFullModel(af_extractor, kp_detector, he_estimator, generator, discriminator, train_params, args, train=True)
     discriminator_full = DiscriminatorFullModel(discriminator, generator.output_channels, train_params, args)
 
     if torch.cuda.is_available():
-        generator_full.cuda(args.local_rank)
-        discriminator_full = discriminator_full.cuda(args.local_rank)
-
         generator_full = torch.nn.DataParallel(generator_full)
         discriminator_full = torch.nn.DataParallel(discriminator_full)
         # generator_full = DDP(generator_full, device_ids=[args.local_rank], output_device=args.local_rank)

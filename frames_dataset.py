@@ -1,6 +1,7 @@
 import os
 from glob import glob
 from skimage import io, img_as_float32
+from skimage.transform import resize
 
 import numpy as np
 from torch.utils.data import Dataset
@@ -13,39 +14,35 @@ class FramesDataset(Dataset):
     """
 
     def __init__(self, root_dir, frame_shape=(256, 256, 3), is_train=True, random_seed=42, **kwargs):
-        self.root_dir = root_dir
         self.frame_shape = tuple(frame_shape)
-        self.root_dir = os.path.join(self.root_dir, 'train' if is_train else 'test')
+        self.root_dir = root_dir  # /home/nas2_userF/dataset/Voxceleb2
 
-        train_videos = []
-        for identity in os.listdir(self.root_dir):
-            train_videos += glob(f'{os.path.join(self.root_dir, identity)}/**')
+        videos = []
+        for folder in glob(f'{root_dir}/**'):
+            videos += glob(f'{folder}/mp4_train/**')
 
-        test_videos = []
-        for identity in os.listdir(self.root_dir):
-            test_videos += glob(f'{os.path.join(self.root_dir, identity)}/**')
-
-        if is_train:
-            self.videos = train_videos
-        else:
-            self.videos = test_videos
-
-        self.is_train = is_train
+        self.videos = videos
 
     def __len__(self):
         return len(self.videos)
 
     def __getitem__(self, idx):
-        path = self.videos[idx]
+        video = self.videos[idx]
         
-        frames = os.listdir(path)
+        frames = glob(f'{video}/**.jpg')
         num_frames = len(frames)
-        frame_idx = np.sort(np.random.choice(num_frames, replace=True, size=2))
 
-        images = [img_as_float32(io.imread(os.path.join(path, frames[idx]))) for idx in frame_idx]
+        frame_idx = np.random.choice(num_frames, replace=False, size=2)
+
+        images = [img_as_float32(resize(io.imread(frames[idx]), (self.frame_shape[0], self.frame_shape[1]))) for idx in frame_idx]
         source = np.array(images[0], dtype='float32')
         driving = np.array(images[1], dtype='float32')
 
+        if source.shape != self.frame_shape:
+            source = np.array(img_as_float32(resize(io.imread(frames[0]), (self.frame_shape[0], self.frame_shape[1]))), dtype='float32')
+        if driving.shape != self.frame_shape:
+            driving = np.array(img_as_float32(resize(io.imread(frames[-1]), (self.frame_shape[0], self.frame_shape[1]))), dtype='float32')
+        
         return source.transpose((2, 0, 1)), driving.transpose((2, 0, 1))
 
 
