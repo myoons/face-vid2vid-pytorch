@@ -29,23 +29,23 @@ class FramesDataset(Dataset):
     def __len__(self):
         return len(self.videos)
 
+    def sample_images(self, frames, frame_idx):
+        return [img_as_float32(resize(io.imread(frames[idx]), (self.frame_shape[0], self.frame_shape[1]))) for idx in frame_idx]
+
     def __getitem__(self, idx):
         video = self.videos[idx]
         
-        frames = glob(f'{video}/**.png')
+        frames = glob(f'{video}/**.jpg')
         num_frames = len(frames)
 
         frame_idx = np.random.choice(num_frames, replace=False, size=2)
 
-        images = [img_as_float32(resize(io.imread(frames[idx]), (self.frame_shape[0], self.frame_shape[1]))) for idx in frame_idx]
+        images = self.sample_images(frames, frame_idx)
+        while images[0].shape != self.frame_shape and images[1].shape != self.frame_shape:
+            images = self.sample_images(frames. frame_idx)
+
         source = np.array(images[0], dtype='float32')
         driving = np.array(images[1], dtype='float32')
-
-        if source.shape != self.frame_shape:
-            source = np.array(img_as_float32(resize(io.imread(frames[0]), (self.frame_shape[0], self.frame_shape[1]))), dtype='float32')
-        if driving.shape != self.frame_shape:
-            driving = np.array(img_as_float32(resize(io.imread(frames[-1]), (self.frame_shape[0], self.frame_shape[1]))), dtype='float32')
-        
         return source.transpose((2, 0, 1)), driving.transpose((2, 0, 1))
 
 
