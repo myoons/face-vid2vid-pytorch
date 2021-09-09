@@ -3,6 +3,9 @@ from glob import glob
 from skimage import io, img_as_float32
 from skimage.transform import resize
 
+from PIL import ImageFile
+ImageFile.LOAD_TRUNCATED_IMAGES = True
+
 import numpy as np
 from torch.utils.data import Dataset
 
@@ -29,7 +32,7 @@ class FramesDataset(Dataset):
     def __getitem__(self, idx):
         video = self.videos[idx]
         
-        frames = glob(f'{video}/**.jpg')
+        frames = glob(f'{video}/**.png')
         num_frames = len(frames)
 
         frame_idx = np.random.choice(num_frames, replace=False, size=2)

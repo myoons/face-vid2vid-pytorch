@@ -72,26 +72,26 @@ class Transform:
     """
     Random tps transformation for equivariance constraints.
     """
-    def __init__(self, batch_size, **kwargs):
+    def __init__(self, batch_size, device, **kwargs):
         noise = torch.normal(mean=0, std=kwargs['sigma_affine'] * torch.ones([batch_size, 2, 3]))
-        self.theta = torch.eye(2, 3).view(1, 2, 3) + noise
+        self.theta = (torch.eye(2, 3).view(1, 2, 3) + noise).to(device)
+        self.device = device
         self.batch_size = batch_size
 
         if ('sigma_tps' in kwargs) and ('points_tps' in kwargs):
             self.tps = True
-            self.control_points = make_coordinate_grid_2d((kwargs['points_tps'], kwargs['points_tps']), dtype=noise.dtype)
+            self.control_points = make_coordinate_grid_2d((kwargs['points_tps'], kwargs['points_tps']), dtype=noise.dtype).to(device)
             self.control_points = self.control_points.unsqueeze(0)
-            self.control_params = torch.normal(mean=0, std=kwargs['sigma_tps'] * torch.ones([batch_size, 1, kwargs['points_tps'] ** 2]))
+            self.control_params = torch.normal(mean=0, std=kwargs['sigma_tps'] * torch.ones([batch_size, 1, kwargs['points_tps'] ** 2])).to(device)
         else:
             self.tps = False
 
     def transform_frame(self, frame):
-        grid = make_coordinate_grid_2d(frame.shape[2:], dtype=frame.dtype).unsqueeze(0).to(frame.device)
+        grid = make_coordinate_grid_2d(frame.shape[2:], dtype=frame.dtype).unsqueeze(0).to(self.device)
         grid = grid.view(1, frame.shape[2] * frame.shape[3], 2)
         grid = self.warp_coordinates(grid).view(self.batch_size, frame.shape[2], frame.shape[3], 2)
         return F.grid_sample(frame, grid, padding_mode="reflection")
 
-    # TODO() : 학습 완료후 시각화 필요
     def warp_coordinates(self, coordinates):
         theta = self.theta.type(coordinates.type())
         theta = theta.unsqueeze(1)

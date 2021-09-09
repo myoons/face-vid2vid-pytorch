@@ -6,7 +6,6 @@ from math import cos, sin
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
-from PIL import Image
 
 from modules.pretrained_models import Vgg19, Hopenet, FaceVgg
 from modules.util import Transform, ImagePyramid
@@ -35,11 +34,8 @@ class GeneratorFullModel(nn.Module):
         self.disc_scales = self.discriminator.scales
         self.pyramid = ImagePyramid(self.scales, generator.output_channels)
 
-        if torch.cuda.is_available():
-            self.pyramid = self.pyramid.cuda(args.local_rank)
-
         self.loss_weights = train_params['loss_weights']
-        self.idx_tensor = torch.arange(66, dtype=torch.float32)
+        self.idx_tensor = torch.arange(66, dtype=torch.float32).to(args.local_rank)
         self.num_kp = af_extractor.num_kp
 
         self.transform_hopenet = transforms.Compose([transforms.Resize(size=(224, 224)),
@@ -48,10 +44,6 @@ class GeneratorFullModel(nn.Module):
 
         self.hopenet = Hopenet(requires_grad=False, weight_dir='pretrained/hopenet.pkl')
         self.hopenet.eval()
-
-        if torch.cuda.is_available():
-            self.hopenet = self.hopenet.cuda(args.local_rank)
-            self.hopenet.eval()
 
         self.fa = face_alignment.FaceAlignment(face_alignment.LandmarksType._2D, flip_input=False,
                                                device=f'cuda:{args.local_rank}')
@@ -62,15 +54,8 @@ class GeneratorFullModel(nn.Module):
             self.vgg.eval()
             self.face_vgg.eval()
 
-            if torch.cuda.is_available():
-                self.vgg = self.vgg.cuda(args.local_rank)
-                self.face_vgg = self.face_vgg.cuda(args.local_rank)
-                self.vgg.eval()
-                self.face_vgg.eval()
-
     @staticmethod
     def pred_to_degree(pred, idx_tensor):
-        idx_tensor = idx_tensor.to(pred.device)
         degree = torch.sum(torch.softmax(pred, dim=-1) * idx_tensor, 1) * 3 - 99
         degree = degree / 180 * 3.14
         return degree
@@ -173,7 +158,7 @@ class GeneratorFullModel(nn.Module):
                 loss_values['feature_matching'] = feature_matching
 
         """ Equivariance loss """
-        transform = Transform(x['driving'].shape[0], **self.train_params['transform_params'])
+        transform = Transform(x['driving'].shape[0], self.args.local_rank, **self.train_params['transform_params'])
         transformed_frame = transform.transform_frame(x['driving'])
         transformed_he_driving = self.he_estimator(transformed_frame)
 
@@ -321,9 +306,6 @@ class DiscriminatorFullModel(torch.nn.Module):
         self.train_params = train_params
         self.scales = self.discriminator.scales
         self.pyramid = ImagePyramid(self.scales, generator_output_channels)
-
-        if torch.cuda.is_available():
-            self.pyramid = self.pyramid.cuda(args.local_rank)
 
         self.loss_weights = train_params['loss_weights']
         self.zero_tensor = None

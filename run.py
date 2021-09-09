@@ -3,6 +3,8 @@ import yaml
 from argparse import ArgumentParser
 from time import gmtime, strftime
 from shutil import copy
+import torch.multiprocessing as mp
+
 
 from frames_dataset import FramesDataset
 
@@ -14,6 +16,7 @@ from modules.discriminator import MultiScaleDiscriminator
 
 import torch
 import torch.distributed as dist
+from torch.nn.parallel import DistributedDataParallel as DDP
 
 from train import train
 
@@ -32,35 +35,38 @@ def arg_parse():
     parser.add_argument("--mode", default="train", choices=["train"])
     parser.add_argument("--log_dir", default='log', help="path to log into")
     parser.add_argument("--checkpoint", default=None, help="path to checkpoint to restore")
-    parser.add_argument("--device_ids", default="0,1,2,3", type=lambda x: list(map(int, x.split(','))),
-                        help="Names of the devices comma separated.")
+
     parser.add_argument("--verbose", dest="verbose", action="store_true", help="Print model architecture")
     parser.set_defaults(verbose=False)
 
     # For Distributed Data Parallel training
-    parser.add_argument("--local_rank", type=int, default=0, metavar='N', help='local process rank')
+    parser.add_argument("--world_size", default=1, type=int, help="number of gpus to use")
 
     return parser.parse_args()
 
 
-if __name__ == '__main__':
+def setup(rank, world_size):
+    os.environ['MASTER_ADDR'] = 'localhost'
+    os.environ['MASTER_PORT'] = '12355'
 
-    args = arg_parse()
+    dist.init_process_group('nccl', rank=rank, world_size=world_size)
+
+
+def main(rank, world_size, args):
+    print(f'Running DistributedDataParallel training on rank {rank}')
+    setup(rank, world_size)
+
+    args.local_rank = rank
+    args.is_main_process = rank == 0
+
     with open(args.config) as f:
-        config = yaml.load(f)
+        config = yaml.load(f, Loader=yaml.FullLoader)
 
-    # For Distributed Data Parallel training
-    # dist.init_process_group(backend='nccl', init_method='env://')
-    # torch.cuda.set_device(args.local_rank)
-
-    args.is_main_process = args.local_rank == 0
-
-    if args.is_main_process:
-        if args.checkpoint is not None:
-            log_dir = os.path.join(*os.path.split(args.checkpoint)[:-1])
-        else:
-            log_dir = os.path.join(args.log_dir, os.path.basename(args.config).split('.')[0])
-            log_dir += ' ' + strftime("%d_%m_%y_%H.%M.%S", gmtime())
+    if args.checkpoint is not None:
+        log_dir = os.path.join(*os.path.split(args.checkpoint)[:-1])
+    else:
+        log_dir = os.path.join(args.log_dir, os.path.basename(args.config).split('.')[0])
+        log_dir += ' ' + strftime("%d_%m_%y_%H.%M.%S", gmtime())
 
     if args.is_main_process:
         if not os.path.exists(log_dir):
@@ -72,7 +78,7 @@ if __name__ == '__main__':
                                               **config['model_params']['common_params'])
 
     if torch.cuda.is_available():
-        af_extractor.cuda(args.local_rank)
+        af_extractor = af_extractor.to(args.local_rank)
     if args.verbose:
         print(af_extractor)
 
@@ -80,7 +86,7 @@ if __name__ == '__main__':
                                             **config['model_params']['common_params'])
 
     if torch.cuda.is_available():
-        kp_detector.cuda(args.local_rank)
+        kp_detector = kp_detector.to(args.local_rank)
     if args.verbose:
         print(kp_detector)
 
@@ -88,7 +94,7 @@ if __name__ == '__main__':
                                            **config['model_params']['common_params'])
 
     if torch.cuda.is_available():
-        he_estimator.cuda(args.local_rank)
+        he_estimator = he_estimator.to(args.local_rank)
     if args.verbose:
         print(he_estimator)
 
@@ -96,7 +102,7 @@ if __name__ == '__main__':
                                         **config['model_params']['common_params'])
 
     if torch.cuda.is_available():
-        generator.cuda(args.local_rank)
+        generator = generator.to(args.local_rank)
     if args.verbose:
         print(generator)
 
@@ -104,7 +110,7 @@ if __name__ == '__main__':
                                             **config['model_params']['common_params'])
 
     if torch.cuda.is_available():
-        discriminator.cuda(args.local_rank)
+        discriminator = discriminator.to(args.local_rank)
     if args.verbose:
         print(discriminator)
 
@@ -112,3 +118,13 @@ if __name__ == '__main__':
     
     if args.mode == 'train':
         train(config, af_extractor, kp_detector, he_estimator, generator, discriminator, log_dir, dataset, args)
+
+
+if __name__ == '__main__':
+    args = arg_parse()
+
+    # Initialize multiple processes
+    mp.spawn(main,
+            args=(args.world_size, args),
+            nprocs=args.world_size,
+            join=True)
