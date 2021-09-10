@@ -245,7 +245,7 @@ class GeneratorFullModel(nn.Module):
 
         aligned_images = []
         for idx, pred in enumerate(preds):
-            if len(pred) > 0:
+            if len(pred) == 1:
                 lt_x, lt_y, rb_x, rb_y, _ = pred[0]
                 bw = rb_x - lt_x
                 bh = rb_y - lt_y
@@ -255,9 +255,14 @@ class GeneratorFullModel(nn.Module):
                 y_min = int(max(lt_y - 3 * bh / 4, 0))
                 y_max = int(min(rb_y + bh / 4, h-1))
 
-                img = images[idx, int(y_min):int(y_max), int(x_min):int(x_max)]
-                img = self.transform_hopenet(img)
-                aligned_images.append(img)
+                if y_min == y_max or x_min == x_max:
+                    img = images[idx]
+                    img = self.transform_hopenet(img)
+                    aligned_images.append(img)
+                else:
+                    img = images[idx, :, y_min:y_max, x_min:x_max]
+                    img = self.transform_hopenet(img)
+                    aligned_images.append(img)
             else:
                 img = images[idx]
                 img = self.transform_hopenet(img)

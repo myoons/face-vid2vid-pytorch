@@ -39,7 +39,7 @@ def train(config, af_extractor, kp_detector, he_estimator, generator, discrimina
     scheduler_discriminator = MultiStepLR(optimizer_discriminator, epoch_milestones, gamma=0.1, last_epoch=start_epoch - 1)
 
     sampler = DistributedSampler(dataset)
-    dataloader = DataLoader(dataset, sampler=sampler, batch_size=train_params['batch_size'], drop_last=True, num_workers=10, pin_memory=True)
+    dataloader = DataLoader(dataset, sampler=sampler, batch_size=train_params['batch_size'], drop_last=True, num_workers=16, pin_memory=True)
 
     generator_full = GeneratorFullModel(af_extractor, kp_detector, he_estimator, generator, discriminator, train_params, args, train=True)
     discriminator_full = DiscriminatorFullModel(discriminator, generator.output_channels, train_params, args)
@@ -82,12 +82,13 @@ def train(config, af_extractor, kp_detector, he_estimator, generator, discrimina
             loss.backward()
 
             optimizer_af_extractor.step()
-            optimizer_af_extractor.zero_grad()
             optimizer_kp_detector.step()
-            optimizer_kp_detector.zero_grad()
             optimizer_he_estimator.step()
-            optimizer_he_estimator.zero_grad()
             optimizer_generator.step()
+            
+            optimizer_af_extractor.zero_grad()
+            optimizer_kp_detector.zero_grad()
+            optimizer_he_estimator.zero_grad()
             optimizer_generator.zero_grad()
 
             if train_params['loss_weights']['generator_gan'] != 0:                
