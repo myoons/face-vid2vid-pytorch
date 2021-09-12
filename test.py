@@ -1,4 +1,5 @@
 import yaml
+import imageio
 import numpy as np
 import face_alignment
 import matplotlib.pyplot as plt
@@ -73,9 +74,6 @@ def get_head_pose(images, face_align, hopenet, he):
 
 
 def load_cpk(ckpt):
-
-    print(ckpt.keys())
-    input()
 
     afe = AppearanceFeatureExtractor(**config['model_params']['af_extractor'],
                                      **config['model_params']['common_params'])
@@ -293,4 +291,5 @@ if __name__ == '__main__':
     generated = generator(appearance_feature, kp_source, kp_driving)
     generated.update({'kp_source': kp_source, 'kp_driving': kp_driving})
 
-    visualize(source, driving, generated)
+    image = visualize(source, driving, generated)
+    imageio.imsave('sample/out.png', image)
