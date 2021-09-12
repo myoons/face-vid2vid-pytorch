@@ -1,7 +1,4 @@
-import cv2
 import face_alignment
-import numpy as np
-from math import cos, sin
 
 import torch
 import torch.nn as nn

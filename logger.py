@@ -216,4 +216,3 @@ class Visualizer:
         image = self.create_image_grid(*images)
         image = (255 * image).astype(np.uint8)
         return image
-        

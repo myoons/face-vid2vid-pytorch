@@ -1,6 +1,5 @@
-import os
 from glob import glob
-from skimage import io, img_as_float32
+from skimage import io
 from skimage.transform import resize
 
 from PIL import ImageFile
