@@ -5,7 +5,6 @@ from time import gmtime, strftime
 from shutil import copy
 import torch.multiprocessing as mp
 
-
 from frames_dataset import FramesDataset
 
 from modules.af_extractor import AppearanceFeatureExtractor
@@ -115,7 +114,7 @@ def main(rank, world_size, args):
         print(discriminator)
 
     dataset = FramesDataset(is_train=(args.mode == 'train'), **config['dataset_params'])
-    
+
     if args.mode == 'train':
         train(config, af_extractor, kp_detector, he_estimator, generator, discriminator, log_dir, dataset, args)
 
@@ -125,6 +124,6 @@ if __name__ == '__main__':
 
     # Initialize multiple processes
     mp.spawn(main,
-            args=(args.world_size, args),
-            nprocs=args.world_size,
-            join=True)
+             args=(args.world_size, args),
+             nprocs=args.world_size,
+             join=True)

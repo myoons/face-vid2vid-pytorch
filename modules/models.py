@@ -324,8 +324,8 @@ class DiscriminatorFullModel(torch.nn.Module):
         discriminator_gan = 0.
         for scale in self.scales:
             key = f'prediction_map_{scale}'
-            discriminator_gan += torch.mean(torch.min(out_dict_real[key] - 1, self.get_zero_tensor(out_dict_real[key])))
-            discriminator_gan += torch.mean(torch.min(-out_dict_generated[key] - 1, self.get_zero_tensor(out_dict_generated[key])))
+            discriminator_gan -= torch.mean(torch.min(out_dict_real[key] - 1, self.get_zero_tensor(out_dict_real[key])))
+            discriminator_gan -= torch.mean(torch.min(-out_dict_generated[key] - 1, self.get_zero_tensor(out_dict_generated[key])))
 
         loss_values['discriminator_gan'] = self.loss_weights['discriminator_gan'] * discriminator_gan
         return loss_values
