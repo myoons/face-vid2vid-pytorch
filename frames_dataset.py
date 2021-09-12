@@ -20,8 +20,15 @@ class FramesDataset(Dataset):
         self.frame_shape = tuple(frame_shape)
         self.root_dir = root_dir  # /home/nas2_userF/dataset/Voxceleb2
 
+        if is_train:
+            sets = [f'{root_dir}/train_0',
+                          f'{root_dir}/train_1',
+                          f'{root_dir}/train_2']
+        else:
+            sets = [f'{root_dir}/train_3']
+            
         videos = []
-        for folder in glob(f'{root_dir}/**'):
+        for folder in sets:
             videos += glob(f'{folder}/mp4_train/**')
 
         self.videos = videos

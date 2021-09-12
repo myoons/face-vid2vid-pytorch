@@ -110,6 +110,43 @@ class GeneratorFullModel(nn.Module):
 
         return value
 
+    def get_head_pose(self, images, he, device):
+
+        b, c, h, w = images.shape
+        preds = self.fa.face_detector.detect_from_batch(images * 255)
+
+        aligned_images = []
+        for idx, pred in enumerate(preds):
+            if len(pred) == 1:
+                lt_x, lt_y, rb_x, rb_y, _ = pred[0]
+                bw = rb_x - lt_x
+                bh = rb_y - lt_y
+
+                x_min = int(max(lt_x - 2 * bw / 4, 0))
+                x_max = int(min(rb_x + 2 * bw / 4, w-1))
+                y_min = int(max(lt_y - 3 * bh / 4, 0))
+                y_max = int(min(rb_y + bh / 4, h-1))
+
+                if y_min == y_max or x_min == x_max:
+                    img = images[idx]
+                    img = self.transform_hopenet(img)
+                    aligned_images.append(img)
+                else:
+                    img = images[idx, :, y_min:y_max, x_min:x_max]
+                    img = self.transform_hopenet(img)
+                    aligned_images.append(img)
+            else:
+                img = images[idx]
+                img = self.transform_hopenet(img)
+                aligned_images.append(img)
+
+        aligned_tensor = torch.stack(aligned_images)
+        yaw, pitch, roll = self.hopenet(aligned_tensor)
+        
+        he['yaw'] = yaw
+        he['pitch'] = pitch
+        he['roll'] = roll
+
     def calculate_loss_values(self, x, pyramid_real, pyramid_generated, generated, kp_canonical, kp_driving,
                               he_driving):
         loss_values = dict()
@@ -127,8 +164,7 @@ class GeneratorFullModel(nn.Module):
             if 'face_perceptual' in self.loss_weights:
                 face_vgg_real = self.face_vgg(pyramid_real['prediction_1'])
                 face_vgg_generated = self.face_vgg(pyramid_generated['prediction_1'])
-                perceptual += self.loss_weights['face_perceptual'] * torch.abs(
-                    face_vgg_real - face_vgg_generated.detach()).mean()
+                perceptual += self.loss_weights['face_perceptual'] * torch.abs(face_vgg_real - face_vgg_generated.detach()).mean()
 
             loss_values['perceptual'] = perceptual
 
@@ -147,13 +183,11 @@ class GeneratorFullModel(nn.Module):
                 feature_matching = 0.
                 for scale in self.disc_scales:
                     key = f'feature_maps_{scale}'
-                    for i, (feature_real, feature_generated) in enumerate(
-                            zip(out_dict_real[key], out_dict_generated[key])):
+                    for i, (feature_real, feature_generated) in enumerate(zip(out_dict_real[key], out_dict_generated[key])):
                         if self.loss_weights['feature_matching'][i] == 0:
                             continue
 
-                        feature_matching += self.loss_weights['feature_matching'][i] * torch.abs(
-                            feature_real - feature_generated).mean()
+                        feature_matching += self.loss_weights['feature_matching'][i] * torch.abs(feature_real - feature_generated).mean()
 
                 loss_values['feature_matching'] = feature_matching
 
@@ -198,8 +232,8 @@ class GeneratorFullModel(nn.Module):
             keypoints_diff = keypoints_repeat - keypoints_repeat.transpose(1, 2)
             keypoints_diff = F.relu(0.1 - torch.sum(keypoints_diff * keypoints_diff, dim=-1))
 
-            mask = torch.tril(torch.ones_like(keypoints_diff[0]), diagonal=-1)
-            keypoints_diff = keypoints_diff * mask
+            # mask = torch.tril(torch.ones_like(keypoints_diff[0]), diagonal=-1)
+            # keypoints_diff = keypoints_diff * mask
             keypoint_prior += torch.sum(keypoints_diff, dim=[1, 2]).mean()
 
             mean_depth = kp_driving['keypoints'][:, :, -1].mean(-1)
@@ -237,43 +271,6 @@ class GeneratorFullModel(nn.Module):
             loss_values['deformation_prior'] = self.loss_weights['deformation_prior'] * deformation_prior
 
         return loss_values
-
-    def get_head_pose(self, images, he, device):
-
-        b, c, h, w = images.shape
-        preds = self.fa.face_detector.detect_from_batch(images * 255)
-
-        aligned_images = []
-        for idx, pred in enumerate(preds):
-            if len(pred) == 1:
-                lt_x, lt_y, rb_x, rb_y, _ = pred[0]
-                bw = rb_x - lt_x
-                bh = rb_y - lt_y
-
-                x_min = int(max(lt_x - 2 * bw / 4, 0))
-                x_max = int(min(rb_x + 2 * bw / 4, w-1))
-                y_min = int(max(lt_y - 3 * bh / 4, 0))
-                y_max = int(min(rb_y + bh / 4, h-1))
-
-                if y_min == y_max or x_min == x_max:
-                    img = images[idx]
-                    img = self.transform_hopenet(img)
-                    aligned_images.append(img)
-                else:
-                    img = images[idx, :, y_min:y_max, x_min:x_max]
-                    img = self.transform_hopenet(img)
-                    aligned_images.append(img)
-            else:
-                img = images[idx]
-                img = self.transform_hopenet(img)
-                aligned_images.append(img)
-
-        aligned_tensor = torch.stack(aligned_images)
-        yaw, pitch, roll = self.hopenet(aligned_tensor)
-        
-        he['yaw'] = yaw
-        he['pitch'] = pitch
-        he['roll'] = roll
 
     def forward(self, x):
         kp_canonical = self.kp_detector(x['source'])
@@ -327,9 +324,8 @@ class DiscriminatorFullModel(torch.nn.Module):
         discriminator_gan = 0.
         for scale in self.scales:
             key = f'prediction_map_{scale}'
-            discriminator_gan -= torch.mean(torch.min(out_dict_real[key] - 1, self.get_zero_tensor(out_dict_real[key])))
-            discriminator_gan -= torch.mean(
-                torch.min(-out_dict_generated[key] - 1, self.get_zero_tensor(out_dict_generated[key])))
+            discriminator_gan += torch.mean(torch.min(out_dict_real[key] - 1, self.get_zero_tensor(out_dict_real[key])))
+            discriminator_gan += torch.mean(torch.min(-out_dict_generated[key] - 1, self.get_zero_tensor(out_dict_generated[key])))
 
         loss_values['discriminator_gan'] = self.loss_weights['discriminator_gan'] * discriminator_gan
         return loss_values

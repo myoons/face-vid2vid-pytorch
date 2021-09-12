@@ -78,7 +78,7 @@ train_params:
     discriminator_gan: 1
     feature_matching: [10, 10, 10, 10]
     perceptual: [10, 10, 10, 10, 10]
-    # face_perceptual: 10
+    face_perceptual: 10
     equivariance_keypoints: 10
     equivariance_jacobian: 0
     keypoint_prior: 10
