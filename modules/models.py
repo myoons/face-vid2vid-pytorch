@@ -140,9 +140,7 @@ class GeneratorFullModel(nn.Module):
         aligned_tensor = torch.stack(aligned_images)
         yaw, pitch, roll = self.hopenet(aligned_tensor)
         
-        he['yaw'] = yaw
-        he['pitch'] = pitch
-        he['roll'] = roll
+        return yaw, pitch, roll
 
     def calculate_loss_values(self, x, pyramid_real, pyramid_generated, generated, kp_canonical, kp_driving,
                               he_driving):
