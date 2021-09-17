@@ -124,11 +124,11 @@ class GeneratorFullModel(nn.Module):
                 y_min = int(max(lt_y - 3 * bh / 4, 0))
                 y_max = int(min(rb_y + bh / 4, h-1))
 
-                if y_min == y_max or x_min == x_max:
+                try:
                     img = images[idx]
                     img = self.transform_hopenet(img)
                     aligned_images.append(img)
-                else:
+                except Exception as _:
                     img = images[idx, :, y_min:y_max, x_min:x_max]
                     img = self.transform_hopenet(img)
                     aligned_images.append(img)

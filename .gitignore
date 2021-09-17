@@ -4,3 +4,5 @@ data/
 pretrained/
 log/
 1
+temp.py
+00000071-checkpoint.pth.tar
